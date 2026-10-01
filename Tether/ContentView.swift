@@ -18,11 +18,11 @@ struct ContentView: View {
             if let selection {
                 BrowserView(selection: selection)
                     .id(selection)
+            } else if let device = model.devices.devices.first(where: { $0.state == .ready })
+                        ?? model.devices.devices.first {
+                DeviceStateView(device: device)
             } else {
-                ContentUnavailableView(
-                    "No Phone Connected",
-                    systemImage: "smartphone",
-                    description: Text("Connect an Android phone with a USB cable, unlock it, and choose “File transfer” in the USB notification."))
+                NoPhoneView()
             }
         }
         .onChange(of: selection) {

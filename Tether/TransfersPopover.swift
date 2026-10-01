@@ -80,8 +80,10 @@ private struct TransferRow: View {
                 Button("Cancel", systemImage: "xmark.circle.fill") { model.transfers.cancel(job.id) }
                     .labelStyle(.iconOnly).buttonStyle(.borderless)
             case .failed, .cancelled:
-                Button("Retry", systemImage: "arrow.clockwise") { model.transfers.retry(job.id) }
-                    .labelStyle(.iconOnly).buttonStyle(.borderless)
+                if job.canRetry {
+                    Button("Retry", systemImage: "arrow.clockwise") { model.transfers.retry(job.id) }
+                        .labelStyle(.iconOnly).buttonStyle(.borderless)
+                }
             case .finished(let url?):
                 Button("Show in Finder", systemImage: "magnifyingglass") {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
