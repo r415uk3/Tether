@@ -47,7 +47,9 @@ public final class AppModel {
         case .devicesChanged(let list):
             devices.apply(list)
         case .progress(let attempt, let done, let total):
-            transfers.updateProgress(attempt: attempt, done: done, total: total)
+            if !transfers.updateProgress(attempt: attempt, done: done, total: total) {
+                previews.updateProgress(jobID: attempt, done: done, total: total)
+            }
         case .interrupted:
             Task { await devices.reloadDevices() }
         }

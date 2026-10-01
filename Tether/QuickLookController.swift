@@ -14,6 +14,7 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
     private var pendingRequest: Int?
     /// The list or grid that currently controls the panel; key events are forwarded to it.
     private weak var controllingView: NSView?
+    private weak var lastCache: PreviewCache?
 
     var isVisible: Bool {
         QLPreviewPanel.sharedPreviewPanelExists() && QLPreviewPanel.shared()?.isVisible == true
@@ -37,6 +38,7 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
     /// Shows the files (folders are skipped), replacing whatever the panel shows; never closes it.
     func show(_ entries: [FileEntry], deviceID: DeviceID, cache: PreviewCache,
               onError: @escaping @MainActor (MTPError) -> Void) {
+        lastCache = cache
         invalidate() // a download for the previous selection must not land after this one
         let files = entries.filter { !$0.isFolder }
         guard !files.isEmpty else { return }
@@ -66,6 +68,7 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
     func invalidate() {
         latestRequest += 1
         pendingRequest = nil
+        lastCache?.cancelAll()
     }
 
     private func present(_ panel: QLPreviewPanel) {

@@ -109,12 +109,14 @@ public final class TransferQueue {
         }
     }
 
-    public func updateProgress(attempt: UUID, done: UInt64, total: UInt64) {
+    @discardableResult
+    public func updateProgress(attempt: UUID, done: UInt64, total: UInt64) -> Bool {
         // No state check: the final event may arrive just after the job finished.
-        guard let i = jobs.firstIndex(where: { $0.attempt == attempt }) else { return }
+        guard let i = jobs.firstIndex(where: { $0.attempt == attempt }) else { return false }
         jobs[i].done = max(jobs[i].done, done)
         jobs[i].total = total
         jobs[i].lastActivity = .now
+        return true
     }
 
     public func startWatchdog(interval: Duration = .seconds(5)) {
