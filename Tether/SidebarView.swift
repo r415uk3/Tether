@@ -40,19 +40,16 @@ struct SidebarView: View {
 private struct ReleaseButton: View {
     @Environment(AppModel.self) private var model
     let deviceID: DeviceID
-    @State private var releasing = false
 
     var body: some View {
-        Button("Release") {
-            guard !releasing else { return }
-            releasing = true
-            Task {
-                _ = await model.devices.release(deviceID) // the detail view reports a failure
-                releasing = false
-            }
+        Button("Release") { Task { _ = await model.devices.release(deviceID) } }
+            .controlSize(.small)
+            .disabled(model.devices.releasing.contains(deviceID))
+        if model.devices.releaseErrors[deviceID] != nil {
+            Text("Still held. Quit Image Capture and Photos.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        .controlSize(.small)
-        .disabled(releasing)
     }
 }
 

@@ -6,8 +6,6 @@ import TetherCore
 struct DeviceStateView: View {
     @Environment(AppModel.self) private var model
     let device: DeviceInfo
-    @State private var releasing = false
-    @State private var releaseError: String?
 
     var body: some View {
         switch device.state {
@@ -18,7 +16,15 @@ struct DeviceStateView: View {
                 } description: {
                     Text(error.localizedDescription)
                 } actions: {
-                    Button("Try Again") { Task { await model.devices.loadStorages(device.id) } }
+                    Button("Try Again") { Task { await model.devices.retryStorages(device.id) } }
+                }
+            } else if let list = model.devices.storages[device.id], list.isEmpty {
+                ContentUnavailableView {
+                    Label("No Storage Available", systemImage: "internaldrive")
+                } description: {
+                    Text("Unlock the phone and check that USB is set to File Transfer.")
+                } actions: {
+                    Button("Try Again") { Task { await model.devices.retryStorages(device.id) } }
                 }
             } else {
                 ProgressView("Reading your phone…")
@@ -27,10 +33,19 @@ struct DeviceStateView: View {
             ContentUnavailableView {
                 Label("Another App Is Using \(device.displayName)", systemImage: "lock.trianglebadge.exclamationmark")
             } description: {
-                Text(releaseError ?? String(localized: "Image Capture or Photos has taken the phone. Tether can ask it to let go."))
+                if let error = model.devices.releaseErrors[device.id] {
+                    Text(error == .claimedByOtherProcess
+                         ? String(localized: "The phone is still held by another app. Quit Image Capture and Photos, then try again.")
+                         : error.localizedDescription)
+                } else {
+                    Text("Image Capture or Photos has taken the phone. Tether can ask it to let go.")
+                }
             } actions: {
-                Button(releasing ? String(localized: "Releasing…") : String(localized: "Release")) { release() }
-                    .disabled(releasing)
+                let releasing = model.devices.releasing.contains(device.id)
+                Button(releasing ? String(localized: "Releasing…") : String(localized: "Release")) {
+                    Task { _ = await model.devices.release(device.id) }
+                }
+                .disabled(releasing)
             }
         case .unavailable(.deviceLocked):
             ContentUnavailableView {
@@ -43,21 +58,6 @@ struct DeviceStateView: View {
         case .unavailable(let error):
             ContentUnavailableView("Can’t Connect to \(device.displayName)", systemImage: "exclamationmark.triangle",
                                    description: Text(error.localizedDescription))
-        }
-    }
-
-    private func release() {
-        guard !releasing else { return }
-        releasing = true
-        releaseError = nil
-        Task {
-            // On success the device ID changes, so this view is replaced by ContentView's selection logic.
-            if let error = await model.devices.release(device.id) {
-                releaseError = error == .claimedByOtherProcess
-                    ? String(localized: "The phone is still held by another app. Quit Image Capture and Photos, then try again.")
-                    : error.localizedDescription
-            }
-            releasing = false
         }
     }
 }
