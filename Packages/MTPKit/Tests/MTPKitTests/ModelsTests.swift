@@ -40,6 +40,7 @@ private func roundTrip<T: Codable & Equatable>(_ value: T) throws -> T {
     let all: [MTPError] = [.deviceDisconnected, .deviceLocked, .deviceBusy, .claimedByOtherProcess,
                            .storageFull(needed: 2_000_000_000, available: 1_000), .nameConflict("a.txt"),
                            .notFound, .timeout, .cancelled, .serviceInterrupted,
+                           .phoneReconnected,
                            .underlying(code: 1, message: "boom")]
     for error in all { #expect(!(error.errorDescription ?? "").isEmpty) }
     #expect(MTPError.nameConflict("a.txt").errorDescription!.contains("a.txt"))

@@ -15,9 +15,11 @@ struct BrowserView: View {
     @State private var problem: String?
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
 
+    private var session: UUID? { model.devices.session(for: selection.deviceID) }
+
     private var folder: FolderRef {
         FolderRef(deviceID: selection.deviceID, storageID: selection.storageID,
-                  folderID: path.last?.objectID ?? FileEntry.rootID)
+                  folderID: path.last?.objectID ?? FileEntry.rootID, session: session)
     }
 
     private var title: String {
@@ -56,6 +58,7 @@ struct BrowserView: View {
                 selectedIDs = []
                 renameRequest = nil
             }
+            .onChange(of: session) { path = [] }
             .focusedSceneValue(\.browserActions, menuActions)
             .confirmationDialog(deleteTitle, isPresented: isConfirmingDelete) {
                 let items = pendingDelete

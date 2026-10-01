@@ -85,7 +85,8 @@ public actor LocalMTPService: MTPService {
                 publicIDs[device.id] = publicID
                 workers[device.id] = DeviceWorker(device: opened, name: device.model)
                 infos[device.id] = DeviceInfo(id: publicID, manufacturer: opened.info.manufacturer,
-                                              model: opened.info.model, state: opened.info.state)
+                                              model: opened.info.model, state: opened.info.state,
+                                              session: UUID())
             case .failure(let error):
                 guard current else { continue }
                 infos[device.id] = DeviceInfo(id: device.id, manufacturer: device.manufacturer,
@@ -112,23 +113,37 @@ public actor LocalMTPService: MTPService {
     }
 
     public func list(_ folder: FolderRef) async throws -> [FileEntry] {
-        try await worker(folder.deviceID, scanning: true).perform(.interactive) {
+        let worker = try await worker(folder.deviceID, scanning: true)
+        try checkSession(folder)
+        return try await worker.perform(.interactive) {
             try $0.listFolder(storageID: folder.storageID, folderID: folder.folderID)
         }
     }
 
     public func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry {
-        try await worker(folder.deviceID, scanning: true).perform(.interactive) {
+        let worker = try await worker(folder.deviceID, scanning: true)
+        try checkSession(folder)
+        return try await worker.perform(.interactive) {
             try $0.createFolder(name: name, storageID: folder.storageID, parentID: folder.folderID)
         }
     }
 
-    public func rename(objectID: UInt32, deviceID: DeviceID, to newName: String) async throws {
-        try await worker(deviceID, scanning: true).perform(.interactive) { try $0.rename(objectID: objectID, to: newName) }
+    public func rename(_ entry: FileEntry, in folder: FolderRef, to newName: String) async throws {
+        let worker = try await worker(folder.deviceID, scanning: true)
+        try checkSession(folder)
+        try await worker.perform(.interactive) { device in
+            try Transfers.verify(entry, on: device)
+            try device.rename(objectID: entry.objectID, to: newName)
+        }
     }
 
-    public func delete(objectID: UInt32, deviceID: DeviceID) async throws {
-        try await worker(deviceID, scanning: true).perform(.interactive) { try $0.delete(objectID: objectID) }
+    public func delete(_ entry: FileEntry, in folder: FolderRef) async throws {
+        let worker = try await worker(folder.deviceID, scanning: true)
+        try checkSession(folder)
+        try await worker.perform(.interactive) { device in
+            try Transfers.verify(entry, on: device)
+            try device.delete(objectID: entry.objectID)
+        }
     }
 
     public func download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, into directory: URL) async throws -> URL {
@@ -144,7 +159,9 @@ public actor LocalMTPService: MTPService {
                        conflict: ConflictResolution) async throws -> FileEntry {
         let reporter = ProgressReporter(jobID: jobID, registry: cancellations, handler: eventHandler)
         defer { cancellations.clear(jobID) }
-        return try await worker(folder.deviceID, scanning: true).perform(.transfer) { device in
+        let worker = try await worker(folder.deviceID, scanning: true)
+        try checkSession(folder)
+        return try await worker.perform(.transfer) { device in
             try reporter.checkCancelled()
             return try Transfers.upload(fileURL, to: device, storageID: folder.storageID, parentID: folder.folderID,
                                         conflict: conflict) {
@@ -168,6 +185,13 @@ public actor LocalMTPService: MTPService {
         if let worker = workers[key] { return worker }
         if case .unavailable(let error)? = infos[key]?.state { throw error }
         throw MTPError.deviceDisconnected
+    }
+
+    /// Refuses a folder from an earlier connection: Android renumbers objects on reconnect.
+    private func checkSession(_ folder: FolderRef) throws {
+        guard let expected = folder.session else { return }
+        let key = publicIDs.first { $0.value == folder.deviceID }?.key ?? folder.deviceID
+        guard infos[key]?.session == expected else { throw MTPError.phoneReconnected }
     }
 
     private func sortedDevices() -> [DeviceInfo] {

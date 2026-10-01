@@ -17,8 +17,10 @@ public protocol MTPService: Sendable {
     func download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, into directory: URL) async throws -> URL
     func upload(jobID: UUID, fileURL: URL, to folder: FolderRef, conflict: ConflictResolution) async throws -> FileEntry
     func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry
-    func rename(objectID: UInt32, deviceID: DeviceID, to newName: String) async throws
-    func delete(objectID: UInt32, deviceID: DeviceID) async throws
+    /// Verifies `entry` still names the same item, then renames it.
+    func rename(_ entry: FileEntry, in folder: FolderRef, to newName: String) async throws
+    /// Verifies `entry` still names the same item, then deletes it (folders recursively).
+    func delete(_ entry: FileEntry, in folder: FolderRef) async throws
     func cancel(jobID: UUID) async
     /// Abandons all device state and in-flight calls, then reconnects. Used by watchdogs.
     func restart() async
