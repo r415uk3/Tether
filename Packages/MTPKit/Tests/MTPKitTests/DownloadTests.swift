@@ -195,4 +195,37 @@ import Testing
         #expect(try contents(of: url) == ["p.jpg"])
         #expect(try contents(of: dir) == ["Photos", "Photos 2"])
     }
+
+    @Test func verificationDoesNotListTheParentFolder() throws {
+        let camera = device.addFolder("Camera")
+        let file = device.addFile("a.jpg", data: Data(count: 10), in: camera.objectID)
+        let before = device.listFolderCalls
+        _ = try Transfers.download(file, from: device, into: try makeTempDirectory()) { _, _ in true }
+        #expect(device.listFolderCalls == before)
+    }
+
+    @Test func mismatchedObjectFailsWithoutListing() throws {
+        let file = device.addFile("a.jpg", data: Data(count: 10))
+        var stale = file
+        stale.name = "other.jpg" // same handle, different object now
+        let dir = try makeTempDirectory()
+        let before = device.listFolderCalls
+        #expect(throws: MTPError.notFound) {
+            try Transfers.download(stale, from: device, into: dir) { _, _ in true }
+        }
+        #expect(device.listFolderCalls == before)
+        #expect(try contents(of: dir).isEmpty)
+    }
+
+    @Test func injectedFaultReachesTheTransferAndPartialIsRemoved() throws {
+        let file = device.addFile("big.bin", data: Data(count: 40_960))
+        device.inject(.disconnectAfter(bytes: 8192))
+        let dir = try makeTempDirectory()
+        let progress = Log<UInt64>()
+        #expect(throws: MTPError.deviceDisconnected) {
+            try Transfers.download(file, from: device, into: dir) { done, _ in progress.append(done); return true }
+        }
+        #expect(!progress.items.isEmpty) // bytes moved before the fault: the transfer really started
+        #expect(try contents(of: dir).isEmpty)
+    }
 }

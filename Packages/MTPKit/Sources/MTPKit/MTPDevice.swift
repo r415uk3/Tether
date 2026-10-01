@@ -9,6 +9,8 @@ public protocol MTPDevice: AnyObject, Sendable {
     var info: DeviceInfo { get }
     func storages() throws -> [StorageInfo]
     func listFolder(storageID: UInt32, folderID: UInt32) throws -> [FileEntry]
+    /// The object's current metadata (GetObjectInfo), or nil if no object has this handle.
+    func objectInfo(objectID: UInt32) throws -> FileEntry?
     func download(objectID: UInt32, to fileURL: URL, progress: ProgressHandler) throws
     func upload(from fileURL: URL, name: String, size: UInt64, storageID: UInt32, parentID: UInt32,
                 progress: ProgressHandler) throws -> FileEntry
