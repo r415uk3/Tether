@@ -23,6 +23,17 @@ import MTPKit
         #expect(store.storage(for: folder)?.name == "Internal shared storage")
     }
 
+    @Test func storageLoadFailureIsRecordedAndRetried() async throws {
+        let (store, _) = makeStore()
+        device.inject(.fail(.deviceBusy)) // consumed by the first storages() call
+        await store.reloadDevices()
+        try await eventually { store.storageErrors["p1"] == .deviceBusy }
+        #expect(store.storages["p1"] == nil)
+        await store.loadStorages("p1")
+        #expect(store.storageErrors["p1"] == nil)
+        #expect(store.storages["p1"]?.isEmpty == false)
+    }
+
     @Test func refreshCachesListing() async throws {
         device.addFolder("DCIM")
         let (store, _) = makeStore()

@@ -13,6 +13,7 @@ public final class DeviceStore {
 
     public private(set) var devices: [DeviceInfo] = []
     public private(set) var storages: [DeviceID: [StorageInfo]] = [:]
+    public private(set) var storageErrors: [DeviceID: MTPError] = [:]
     public private(set) var listings: [FolderRef: Listing] = [:]
     public var listTimeout: Duration = .seconds(15)
 
@@ -70,6 +71,7 @@ public final class DeviceStore {
         })
         devices = newDevices
         storages = storages.filter { now[$0.key] != nil && !fresh.contains($0.key) }
+        storageErrors = storageErrors.filter { now[$0.key] != nil && !fresh.contains($0.key) }
         listings = listings.filter { key, _ in now[key.deviceID] != nil && !fresh.contains(key.deviceID) }
         for id in fresh {
             onDeviceBecameReady?(id)
@@ -78,8 +80,17 @@ public final class DeviceStore {
     }
 
     public func loadStorages(_ id: DeviceID) async {
-        guard let list = try? await service.storages(deviceID: id), isReady(id) else { return }
-        storages[id] = list
+        do {
+            let list = try await service.storages(deviceID: id)
+            guard isReady(id) else { return }
+            storages[id] = list
+            storageErrors[id] = nil
+        } catch {
+            guard isReady(id) else { return }
+            let mtpError = MTPError.from(error)
+            storageErrors[id] = mtpError
+            log.record("Storage list failed: \(mtpError.logDescription)", category: "browse")
+        }
     }
 
     public func storage(for folder: FolderRef) -> StorageInfo? {

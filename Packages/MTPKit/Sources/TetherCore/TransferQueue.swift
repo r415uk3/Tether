@@ -26,6 +26,15 @@ public final class TransferQueue {
         /// An upload that predates a reconnect of its device: its folder handle may now name another object.
         var isStale = false
 
+        /// False when retrying can't succeed (the upload belongs to an earlier connection).
+        public var canRetry: Bool {
+            switch state {
+            case .failed(.phoneReconnected): false
+            case .failed, .cancelled: !isStale
+            default: false
+            }
+        }
+
         public var name: String {
             switch kind {
             case .download(let entry, _, _): entry.name

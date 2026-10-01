@@ -27,6 +27,21 @@ import MTPKit
         #expect(queue.jobs.first?.state == .finished(url))
     }
 
+    @Test func staleAndReconnectedUploadsCannotBeRetried() async throws {
+        let (queue, _) = try await makeQueue()
+        let file = try makeTempDirectory().appendingPathComponent("a.txt")
+        try Data("a".utf8).write(to: file)
+        let stale = FolderRef(deviceID: "p1", storageID: 1, session: UUID()) // not the current session
+        let id = queue.enqueueUpload(file, to: stale)
+        try await eventually { queue.jobs.first { $0.id == id }?.state == .failed(.phoneReconnected) }
+        #expect(queue.jobs.first { $0.id == id }?.canRetry == false)
+        device.inject(.fail(.deviceBusy))
+        let other = queue.enqueueDownload(device.addFile("b.txt", data: Data("b".utf8)), deviceID: "p1",
+                                          into: try makeTempDirectory())
+        try await eventually { queue.jobs.first { $0.id == other }?.state == .failed(.deviceBusy) }
+        #expect(queue.jobs.first { $0.id == other }?.canRetry == true)
+    }
+
     @Test func jobsForSameDeviceRunOneAtATime() async throws {
         let a = device.addFile("a.bin", data: Data(count: 100_000))
         let b = device.addFile("b.bin", data: Data(count: 100_000))

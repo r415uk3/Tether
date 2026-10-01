@@ -25,12 +25,34 @@ struct SidebarView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                            if error == .claimedByOtherProcess {
+                                ReleaseButton(deviceID: device.id)
+                            }
                         }
                     }
                 }
             }
         }
         .navigationSplitViewColumnWidth(min: 190, ideal: 230)
+    }
+}
+
+private struct ReleaseButton: View {
+    @Environment(AppModel.self) private var model
+    let deviceID: DeviceID
+    @State private var releasing = false
+
+    var body: some View {
+        Button("Release") {
+            guard !releasing else { return }
+            releasing = true
+            Task {
+                _ = await model.devices.release(deviceID) // the detail view reports a failure
+                releasing = false
+            }
+        }
+        .controlSize(.small)
+        .disabled(releasing)
     }
 }
 
