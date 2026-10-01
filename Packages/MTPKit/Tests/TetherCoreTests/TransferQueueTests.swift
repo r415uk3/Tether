@@ -91,6 +91,37 @@ import MTPKit
         device.releaseHang()
     }
 
+    @Test func queuedJobSurvivesRestart() async throws {
+        let a = device.addFile("a.txt", data: Data("x".utf8))
+        let b = device.addFile("b.txt", data: Data("y".utf8))
+        let (queue, _) = try await makeQueue()
+        device.inject(.hang)
+        let dir = try makeTempDirectory()
+        queue.enqueueDownload(a, deviceID: "p1", into: dir)
+        queue.enqueueDownload(b, deviceID: "p1", into: dir)
+        try await Task.sleep(for: .milliseconds(50))
+        provider.holdOpens("p1")
+        let check = Task { await queue.checkForStalls(now: .now + .seconds(31)) }
+        try await Task.sleep(for: .milliseconds(150))
+        provider.releaseOpens("p1")
+        await check.value
+        device.releaseHang()
+        try await eventually { queue.jobs[0].state == .failed(.serviceInterrupted) }
+        try await eventually { if case .finished = queue.jobs[1].state { true } else { false } }
+    }
+
+    @Test func progressNeverMovesBackwards() async throws {
+        let file = device.addFile("a.txt", data: Data("x".utf8))
+        let (queue, _) = try await makeQueue()
+        device.inject(.hang)
+        queue.enqueueDownload(file, deviceID: "p1", into: try makeTempDirectory())
+        let attempt = queue.jobs[0].attempt
+        queue.updateProgress(attempt: attempt, done: 50, total: 100)
+        queue.updateProgress(attempt: attempt, done: 10, total: 100)
+        #expect(queue.jobs[0].done == 50)
+        device.releaseHang()
+    }
+
     @Test func noRestartWhileProgressing() async throws {
         let file = device.addFile("a.txt", data: Data("x".utf8))
         let (queue, _) = try await makeQueue()

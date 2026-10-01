@@ -67,7 +67,10 @@ extension Transfers {
         func walk(_ folderID: UInt32, _ prefix: [String]) throws {
             // Lowercased names already used in this folder (APFS is usually case-insensitive).
             var used = Set<String>()
-            for child in try device.listFolder(storageID: folder.storageID, folderID: folderID) {
+            let children = try device.listFolder(storageID: folder.storageID, folderID: folderID)
+            // Keep-alive: the total is unknown during the walk; lets callers see activity and cancel.
+            guard progress(0, 0) else { throw MTPError.cancelled }
+            for child in children {
                 let name = uniqueName(for: safeName(child.name)) { used.contains($0.lowercased()) }
                 used.insert(name.lowercased())
                 let components = prefix + [name]

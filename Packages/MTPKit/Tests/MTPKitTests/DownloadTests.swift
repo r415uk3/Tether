@@ -37,6 +37,33 @@ import Testing
         #expect(Transfers.uniqueName(for: "free.txt") { taken.contains($0) } == "free.txt")
     }
 
+    @Test func folderWalkReportsKeepAliveProgress() throws {
+        let top = device.addFolder("DCIM")
+        let sub = device.addFolder("Camera", in: top.objectID)
+        let deep = device.addFolder("2026", in: sub.objectID)
+        device.addFile("a.bin", data: Data(count: 8192), in: deep.objectID)
+        let dir = try makeTempDirectory()
+        var calls: [(UInt64, UInt64)] = []
+        _ = try Transfers.download(top, from: device, into: dir) { done, total in
+            calls.append((done, total))
+            return true
+        }
+        // One call per listed folder (3) happens before any file byte is reported (done > 0).
+        let beforeBytes = calls.prefix { $0.0 == 0 }.count
+        #expect(beforeBytes >= 3)
+    }
+
+    @Test func cancelDuringFolderWalkLeavesNothing() throws {
+        let top = device.addFolder("DCIM")
+        let sub = device.addFolder("Camera", in: top.objectID)
+        device.addFile("a.bin", data: Data(count: 8192), in: sub.objectID)
+        let dir = try makeTempDirectory()
+        #expect(throws: MTPError.cancelled) {
+            try Transfers.download(top, from: device, into: dir) { _, _ in false }
+        }
+        #expect(try contents(of: dir).isEmpty)
+    }
+
     @Test func cancelRemovesPartial() throws {
         let file = device.addFile("big.bin", data: Data(count: 40_960))
         let dir = try makeTempDirectory()
