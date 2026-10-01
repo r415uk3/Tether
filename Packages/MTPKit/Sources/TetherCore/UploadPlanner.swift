@@ -41,10 +41,10 @@ public struct PlannedUpload: Sendable, Equatable {
 public enum UploadPlanner {
     public static func plan(_ urls: [URL], existingNames: Set<String>, defaultChoice: ConflictChoice?,
                             ask: (ConflictQuestion) async -> ConflictAnswer) async -> [PlannedUpload] {
-        // A name clashes with the folder or with an earlier item of the same drop.
-        var seen = existingNames
+        // A name clashes with the folder or with an earlier item of the same drop, ignoring case.
+        var seen = Set(existingNames.map(\.nameKey))
         let clashes = urls.map { url in
-            let name = url.lastPathComponent
+            let name = url.lastPathComponent.nameKey
             defer { seen.insert(name) }
             return seen.contains(name)
         }
