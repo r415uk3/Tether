@@ -4,6 +4,7 @@ public enum SettingsKey {
     public static let downloadFolderPath = "downloadFolderPath"
     public static let conflictDefault = "conflictDefault"
     public static let showHiddenFiles = "showHiddenFiles"
+    public static let viewMode = "viewMode"
 }
 
 /// The Settings choice for name clashes; `.ask` shows the dialog.
@@ -49,4 +50,8 @@ public enum AppSettings {
     public static func conflictDefault(in defaults: UserDefaults = .standard) -> ConflictDefault {
         defaults.string(forKey: SettingsKey.conflictDefault).flatMap(ConflictDefault.init(rawValue:)) ?? .ask
     }
+}
+
+public enum BrowserViewMode: String, CaseIterable, Sendable {
+    case icons, list
 }
