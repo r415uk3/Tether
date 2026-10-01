@@ -8,6 +8,8 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
         case hang
     }
 
+    public enum Operation: Sendable { case delete, rename }
+
     private struct Node {
         var entry: FileEntry
         var data: Data
@@ -22,6 +24,7 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     private var nodes: [UInt32: Node] = [:]
     private var nextID: UInt32 = 1
     private var faults: [Fault] = []
+    private var operationFaults: [(operation: Operation, skip: Int, error: MTPError)] = []
     private var disconnected = false
     private var closed = false
 
@@ -49,6 +52,10 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     }
 
     public func inject(_ fault: Fault) { lock.withLock { faults.append(fault) } }
+    /// Makes one future `delete` or `rename` call fail with `error`, after letting `skip` such calls succeed.
+    public func failNext(_ operation: Operation, after skip: Int = 0, with error: MTPError) {
+        lock.withLock { operationFaults.append((operation, skip, error)) }
+    }
     public func releaseHang() { hangGate.signal() }
     public func data(of objectID: UInt32) -> Data? { lock.withLock { nodes[objectID]?.data } }
     public func storage(_ id: UInt32) -> StorageInfo? { lock.withLock { storageList.first { $0.id == id } } }
@@ -138,6 +145,7 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     public func rename(objectID: UInt32, to newName: String) throws {
         try beginSimple()
         try lock.withLock {
+            try consumeOperationFault(.rename)
             guard nodes[objectID] != nil else { throw MTPError.notFound }
             nodes[objectID]!.entry.name = newName
         }
@@ -146,6 +154,7 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     public func delete(objectID: UInt32) throws {
         try beginSimple()
         try lock.withLock {
+            try consumeOperationFault(.delete)
             guard nodes[objectID] != nil else { throw MTPError.notFound }
             removeSubtree(objectID)
         }
@@ -166,6 +175,13 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     private func requireFolder(_ id: UInt32) throws {
         if id == FileEntry.rootID { return }
         guard let node = nodes[id], node.entry.isFolder else { throw MTPError.notFound }
+    }
+
+    private func consumeOperationFault(_ operation: Operation) throws {
+        guard let index = operationFaults.firstIndex(where: { $0.operation == operation }) else { return }
+        if operationFaults[index].skip > 0 { operationFaults[index].skip -= 1; return }
+        let error = operationFaults.remove(at: index).error
+        throw error
     }
 
     private func removeSubtree(_ id: UInt32) {

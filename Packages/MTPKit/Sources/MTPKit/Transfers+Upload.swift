@@ -71,15 +71,16 @@ extension Transfers {
     }
 
     /// Final step of a Replace: the new item is complete under a temporary name.
-    /// Delete the old item(s), then give the new one the original name.
+    /// Delete the old item(s), then give the new one the original name. If deleting fails the original may be
+    /// partly removed, so the new copy is always kept (under its temporary name) and the error says so.
     private static func swapIn(_ uploaded: FileEntry, replacing old: [FileEntry], finalName: String,
                                on device: any MTPDevice) throws -> FileEntry {
         do {
             for entry in old { try device.delete(objectID: entry.objectID) }
         } catch {
-            // The original is (at least partly) still there: drop the new copy instead of leaving both.
-            try? device.delete(objectID: uploaded.objectID)
-            throw MTPError.from(error)
+            let reason = MTPError.from(error).localizedDescription
+            throw MTPError.underlying(code: -5, message: String(
+                localized: "The new “\(finalName)” was copied as “\(uploaded.name)”, but the existing item couldn’t be removed. \(reason)"))
         }
         do {
             try device.rename(objectID: uploaded.objectID, to: finalName)
