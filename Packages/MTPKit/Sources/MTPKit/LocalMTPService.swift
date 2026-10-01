@@ -140,12 +140,14 @@ public actor LocalMTPService: MTPService {
         }
     }
 
-    public func upload(jobID: UUID, fileURL: URL, to folder: FolderRef) async throws -> FileEntry {
+    public func upload(jobID: UUID, fileURL: URL, to folder: FolderRef,
+                       conflict: ConflictResolution) async throws -> FileEntry {
         let reporter = ProgressReporter(jobID: jobID, registry: cancellations, handler: eventHandler)
         defer { cancellations.clear(jobID) }
         return try await worker(folder.deviceID, scanning: true).perform(.transfer) { device in
             try reporter.checkCancelled()
-            return try Transfers.upload(fileURL, to: device, storageID: folder.storageID, parentID: folder.folderID) {
+            return try Transfers.upload(fileURL, to: device, storageID: folder.storageID, parentID: folder.folderID,
+                                        conflict: conflict) {
                 reporter.report(done: $0, total: $1)
             }
         }

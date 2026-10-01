@@ -7,7 +7,7 @@ import MTPKit
 public final class TransferQueue {
     public enum Kind: Equatable, Sendable {
         case download(FileEntry, deviceID: DeviceID, directory: URL)
-        case upload(URL, folder: FolderRef)
+        case upload(URL, folder: FolderRef, conflict: ConflictResolution)
     }
 
     public enum State: Equatable, Sendable {
@@ -27,14 +27,14 @@ public final class TransferQueue {
         public var name: String {
             switch kind {
             case .download(let entry, _, _): entry.name
-            case .upload(let url, _): url.lastPathComponent
+            case .upload(let url, _, _): url.lastPathComponent
             }
         }
 
         public var deviceID: DeviceID {
             switch kind {
             case .download(_, let deviceID, _): deviceID
-            case .upload(_, let folder): folder.deviceID
+            case .upload(_, let folder, _): folder.deviceID
             }
         }
 
@@ -66,8 +66,8 @@ public final class TransferQueue {
     }
 
     @discardableResult
-    public func enqueueUpload(_ url: URL, to folder: FolderRef) -> UUID {
-        enqueue(.upload(url, folder: folder), completion: nil)
+    public func enqueueUpload(_ url: URL, to folder: FolderRef, conflict: ConflictResolution = .fail) -> UUID {
+        enqueue(.upload(url, folder: folder, conflict: conflict), completion: nil)
     }
 
     public func cancel(_ id: UUID) {
@@ -157,8 +157,8 @@ public final class TransferQueue {
             case .download(let entry, let deviceID, let directory):
                 result = .success(try await service.download(jobID: job.attempt, entry: entry,
                                                              deviceID: deviceID, into: directory))
-            case .upload(let url, let folder):
-                _ = try await service.upload(jobID: job.attempt, fileURL: url, to: folder)
+            case .upload(let url, let folder, let conflict):
+                _ = try await service.upload(jobID: job.attempt, fileURL: url, to: folder, conflict: conflict)
                 result = .success(nil)
             }
         } catch {

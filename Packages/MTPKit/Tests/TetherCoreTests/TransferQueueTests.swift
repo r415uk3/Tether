@@ -152,6 +152,18 @@ import MTPKit
         try await eventually { if case .finished = queue.jobs[0].state { true } else { false } }
     }
 
+    @Test func uploadCarriesConflictPolicy() async throws {
+        device.addFile("up.txt", data: Data("old".utf8))
+        let (queue, _) = try await makeQueue()
+        let file = try makeTempDirectory().appendingPathComponent("up.txt")
+        try Data("new".utf8).write(to: file)
+        queue.enqueueUpload(file, to: FolderRef(deviceID: "p1", storageID: 1), conflict: .replace)
+        try await eventually { if case .finished = queue.jobs[0].state { true } else { false } }
+        let children = device.children(of: FileEntry.rootID)
+        #expect(children.map(\.name) == ["up.txt"])
+        #expect(device.data(of: children[0].objectID) == Data("new".utf8))
+    }
+
     @Test func uploadIsQueuedAndFinishes() async throws {
         let (queue, _) = try await makeQueue()
         let file = try makeTempDirectory().appendingPathComponent("up.txt")

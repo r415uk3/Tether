@@ -17,7 +17,7 @@ public final class AppModel {
             transfers?.jobs.contains { $0.deviceID == id && $0.state == .running } ?? false
         }
         transfers.onJobFinished = { [weak store = devices] job in
-            guard case .upload(_, let folder) = job.kind, let store else { return }
+            guard case .upload(_, let folder, _) = job.kind, let store else { return }
             Task {
                 await store.refresh(folder)
                 await store.loadStorages(folder.deviceID)
