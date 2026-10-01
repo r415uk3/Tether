@@ -7,12 +7,14 @@ import MTPKit
 public final class AppModel {
     public let devices: DeviceStore
     public let transfers: TransferQueue
+    public let thumbnails: ThumbnailStore
     @ObservationIgnored private let service: any MTPService
 
     public init(service: any MTPService) {
         self.service = service
         devices = DeviceStore(service: service)
         transfers = TransferQueue(service: service)
+        thumbnails = ThumbnailStore(service: service)
         devices.isDeviceBusy = { [weak transfers] id in
             transfers?.jobs.contains { $0.deviceID == id && $0.state == .running } ?? false
         }

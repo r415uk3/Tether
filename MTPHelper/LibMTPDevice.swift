@@ -135,6 +135,23 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         if LIBMTP_Delete_Object(h, objectID) != 0 { throw lastError(h) }
     }
 
+    func thumbnail(objectID: UInt32) throws -> Data? {
+        let h = try requireHandle()
+        LIBMTP_Clear_Errorstack(h)
+        var data: UnsafeMutablePointer<UInt8>?
+        var size: UInt32 = 0
+        let rc = LIBMTP_Get_Thumbnail(h, objectID, &data, &size)
+        defer { if let data { free(data) } }
+        guard rc == 0, let data, size > 0 else {
+            if rc != 0, LIBMTP_Get_Errorstack(h) != nil, case .deviceDisconnected = lastError(h) {
+                throw MTPError.deviceDisconnected
+            }
+            LIBMTP_Clear_Errorstack(h)
+            return nil // no thumbnail for this object
+        }
+        return Data(bytes: data, count: Int(size))
+    }
+
     func close() {
         if let handle { LIBMTP_Release_Device(handle) }
         handle = nil

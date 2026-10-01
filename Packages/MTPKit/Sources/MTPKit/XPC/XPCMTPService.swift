@@ -34,6 +34,13 @@ public final class XPCMTPService: MTPService, @unchecked Sendable {
         return entries
     }
 
+    public func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
+        guard case .thumbnail(let data) = try await send(.thumbnail(objectID: objectID, folder: folder)) else {
+            throw MTPError.unexpectedResponse
+        }
+        return data
+    }
+
     public func download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, into directory: URL) async throws -> URL {
         let request = XPCRequest.download(jobID: jobID, entry: entry, deviceID: deviceID, directory: directory)
         guard case .url(let url) = try await send(request) else { throw MTPError.unexpectedResponse }

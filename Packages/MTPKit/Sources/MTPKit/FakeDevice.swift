@@ -28,6 +28,9 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     private var disconnected = false
     private var closed = false
     private var listCalls = 0
+    private var thumbnails: [UInt32: Data] = [:]
+    private var thumbnailCount = 0
+    private var thumbnailFault: MTPError?
 
     public init(id: DeviceID = "fake-1", manufacturer: String = "Google", model: String = "Pixel 9",
                 storages: [StorageInfo] = [StorageInfo(id: 1, name: "Internal shared storage",
@@ -91,6 +94,23 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
         try lock.withLock {
             if disconnected { throw MTPError.deviceDisconnected }
             return nodes[objectID]?.entry
+        }
+    }
+
+    public func setThumbnail(_ data: Data, for objectID: UInt32) { lock.withLock { thumbnails[objectID] = data } }
+    public var thumbnailCalls: Int { lock.withLock { thumbnailCount } }
+    /// The next `thumbnail` call throws `error` (separate from the general fault queue).
+    public func failNextThumbnail(with error: MTPError) { lock.withLock { thumbnailFault = error } }
+
+    public func thumbnail(objectID: UInt32) throws -> Data? {
+        try lock.withLock {
+            thumbnailCount += 1
+            if disconnected { throw MTPError.deviceDisconnected }
+            if let fault = thumbnailFault {
+                thumbnailFault = nil
+                throw fault
+            }
+            return thumbnails[objectID]
         }
     }
 

@@ -120,6 +120,12 @@ public actor LocalMTPService: MTPService {
         }
     }
 
+    public func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
+        let worker = try await worker(folder.deviceID, scanning: true)
+        try checkSession(folder)
+        return try await worker.perform(.background) { try $0.thumbnail(objectID: objectID) }
+    }
+
     public func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry {
         let worker = try await worker(folder.deviceID, scanning: true)
         try checkSession(folder)
