@@ -173,6 +173,13 @@ import MTPKit
         #expect(store.devices.map(\.id) == ["p1"])
         #expect(store.listings[folder] != nil)
     }
+
+    @Test func releaseReportsFailure() async throws {
+        provider.attachUnavailable(AttachedDevice(id: "14-9", manufacturer: "S", model: "S25"), error: .claimedByOtherProcess)
+        let (store, _) = makeStore()
+        await store.reloadDevices()
+        #expect(await store.release("14-9") == .claimedByOtherProcess)
+    }
 }
 
 private final class FlakyService: MTPService, @unchecked Sendable {
@@ -201,6 +208,7 @@ private final class FlakyService: MTPService, @unchecked Sendable {
         return try await base.devices()
     }
     func storages(deviceID: DeviceID) async throws -> [StorageInfo] { try await base.storages(deviceID: deviceID) }
+    func releaseDevice(_ deviceID: DeviceID) async throws { try await base.releaseDevice(deviceID) }
     func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
         try await base.thumbnail(objectID: objectID, in: folder)
     }

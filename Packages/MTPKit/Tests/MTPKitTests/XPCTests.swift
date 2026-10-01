@@ -110,4 +110,14 @@ final class XPCTestHost: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
         #expect(try await client.thumbnail(objectID: plain.objectID, in: folder) == nil)
         withExtendedLifetime(host) {}
     }
+
+    @Test func releaseCrossesXPC() async throws {
+        provider.attachClaimed(FakeDevice(id: "serial-B"), as: "14-5")
+        let (client, host) = makeClient()
+        _ = try await client.devices()
+        try await client.releaseDevice("14-5")
+        #expect(try await client.devices().contains { $0.id == "serial-B" && $0.state == .ready })
+        withExtendedLifetime(host) {}
+    }
 }
+

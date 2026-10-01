@@ -21,6 +21,7 @@ enum XPCRequest: Codable, Sendable, Equatable {
     case delete(entry: FileEntry, folder: FolderRef)
     case cancel(jobID: UUID)
     case thumbnail(objectID: UInt32, folder: FolderRef)
+    case releaseDevice(deviceID: DeviceID)
 }
 
 enum XPCResponse: Codable, Sendable {

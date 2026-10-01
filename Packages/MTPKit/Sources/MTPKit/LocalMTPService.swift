@@ -108,6 +108,17 @@ public actor LocalMTPService: MTPService {
         await performScan()
     }
 
+    public func releaseDevice(_ deviceID: DeviceID) async throws {
+        await ensureScanned()
+        let provider = self.provider
+        let released = await Task.detached { provider.releaseClaims() }.value
+        guard released else { throw MTPError.claimedByOtherProcess }
+        try? await Task.sleep(for: .milliseconds(500)) // give the agent a moment to let go of the interface
+        await rescan()
+        let transportKey = key(for: deviceID)
+        if case .unavailable(.claimedByOtherProcess)? = infos[transportKey]?.state { throw MTPError.claimedByOtherProcess }
+    }
+
     public func storages(deviceID: DeviceID) async throws -> [StorageInfo] {
         try await worker(deviceID, scanning: true).perform(.interactive) { try $0.storages() }
     }

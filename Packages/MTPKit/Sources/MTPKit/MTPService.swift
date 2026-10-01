@@ -26,6 +26,8 @@ public protocol MTPService: Sendable {
     func cancel(jobID: UUID) async
     /// Abandons all device state and in-flight calls, then reconnects. Used by watchdogs.
     func restart() async
+    /// Frees a phone held by Image Capture and reconnects. Throws `.claimedByOtherProcess` if it stays held.
+    func releaseDevice(_ deviceID: DeviceID) async throws
 }
 
 public extension MTPService {

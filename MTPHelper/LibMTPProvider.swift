@@ -28,11 +28,16 @@ final class LibMTPProvider: DeviceProvider, @unchecked Sendable {
         return devices
     }
 
+    func releaseClaims() -> Bool {
+        ImageCaptureAgent.terminate()
+    }
+
     func open(_ device: AttachedDevice) throws -> any MTPDevice {
         guard var r = lock.withLock({ raw[device.id] }) else { throw MTPError.deviceDisconnected }
         guard let handle = LIBMTP_Open_Raw_Device_Uncached(&r) else {
-            // On macOS this almost always means ptpcamerad (Image Capture) holds the interface.
-            throw MTPError.claimedByOtherProcess
+            if !ImageCaptureAgent.runningProcessIDs().isEmpty { throw MTPError.claimedByOtherProcess }
+            throw MTPError.underlying(code: -7, message: String(
+                localized: "Tether couldn’t connect to the phone. Unplug it, plug it back in, and choose “File transfer”."))
         }
         let opened = LibMTPDevice(handle: handle, attached: device)
         // A locked Android phone opens but exposes no storage until unlocked.
