@@ -16,7 +16,6 @@ struct TransfersButton: View {
             TransfersList()
                 .environment(model)
                 .frame(width: 340)
-                .frame(minHeight: 80, maxHeight: 400)
         }
     }
 }
@@ -24,16 +23,33 @@ struct TransfersButton: View {
 private struct TransfersList: View {
     @Environment(AppModel.self) private var model
 
+    /// Up to this many rows the popover grows to fit them; beyond it, it scrolls.
+    private static let maxUnscrolledRows = 6
+
     var body: some View {
-        if model.transfers.jobs.isEmpty {
+        let jobs = Array(model.transfers.jobs.reversed())
+        if jobs.isEmpty {
             Text("No transfers")
                 .foregroundStyle(.secondary)
                 .padding()
+        } else if jobs.count <= Self.maxUnscrolledRows {
+            rows(jobs)
         } else {
-            List(model.transfers.jobs.reversed()) { job in
+            ScrollView { rows(jobs) }
+                .frame(height: 400)
+        }
+    }
+
+    private func rows(_ jobs: [TransferQueue.Job]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(jobs) { job in
                 TransferRow(job: job)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                if job.id != jobs.last?.id { Divider().padding(.horizontal, 14) }
             }
         }
+        .padding(.vertical, 6)
     }
 }
 
