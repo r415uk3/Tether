@@ -18,7 +18,8 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
 
     func storages() throws -> [StorageInfo] {
         let h = try requireHandle()
-        guard LIBMTP_Get_Storage(h, 0) == 0 else { throw lastError(h) } // 0 = LIBMTP_STORAGE_SORTBY_NOTSORTED
+        // 0 = full storage info; 1 = storage IDs only (partial success); negative = failure.
+        guard LIBMTP_Get_Storage(h, 0) >= 0 else { throw lastError(h) } // 0 = LIBMTP_STORAGE_SORTBY_NOTSORTED
         var result: [StorageInfo] = []
         var storage = h.pointee.storage
         while let s = storage {
@@ -66,7 +67,7 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         guard let f = LIBMTP_Get_Filemetadata(h, objectID) else {
             // libmtp 1.1.23 returns NULL for a vanished handle and for a dead connection alike, and this call
             // does not populate the errorstack. Probe the connection to tell them apart.
-            if LIBMTP_Get_Storage(h, 0) != 0 {
+            if LIBMTP_Get_Storage(h, 0) < 0 {
                 let error = lastError(h)
                 if case .underlying(let code, _) = error, code == -1 { throw MTPError.deviceDisconnected }
                 throw error
@@ -146,7 +147,7 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
             if rc != 0 {
                 // LIBMTP_Get_Thumbnail returns -1 without populating the errorstack, so lastError cannot tell
                 // "no thumbnail" from a dead connection. Probe the connection (as objectInfo does).
-                if LIBMTP_Get_Storage(h, 0) != 0 {
+                if LIBMTP_Get_Storage(h, 0) < 0 {
                     let error = lastError(h)
                     if case .underlying(let code, _) = error, code == -1 { throw MTPError.deviceDisconnected }
                     throw error
