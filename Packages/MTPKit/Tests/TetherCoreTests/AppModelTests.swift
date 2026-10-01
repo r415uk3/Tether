@@ -65,18 +65,18 @@ import MTPKit
         let slow = FakeDevice(id: "p1", chunkSize: 8192, chunkDelay: 0.01)
         provider.attach(slow)
         let file = slow.addFile("big.bin", data: Data(count: 1_000_000))
-        let model = AppModel(service: LocalMTPService(provider: provider))
+        let model = AppModel(service: LocalMTPService(provider: provider),
+                             thumbnailDirectory: try makeTempDirectory(), previewDirectory: try makeTempDirectory())
         model.devices.listTimeout = .milliseconds(300)
         await model.start()
         let root = FolderRef(deviceID: "p1", storageID: 1)
         let preview = Task { try await model.previews.file(for: file, deviceID: "p1") }
-        try await Task.sleep(for: .milliseconds(100)) // let the download occupy the device
+        try await eventually { model.previews.isDownloading(deviceID: "p1") }
         await model.devices.refresh(root)
         #expect(model.devices.listings[root]?.error == nil)
         #expect(model.devices.listings[root]?.entries.map(\.name) == ["big.bin"])
         #expect(provider.openCount("p1") == 1)
         _ = try await preview.value
-        model.previews.clear()
     }
 
     /// Replugs `phone` under a new USB key and waits until the model sees it ready again.

@@ -11,12 +11,14 @@ public final class AppModel {
     public let previews: PreviewCache
     @ObservationIgnored private let service: any MTPService
 
-    public init(service: any MTPService) {
+    public init(service: any MTPService,
+                thumbnailDirectory: URL? = ThumbnailStore.defaultDirectory,
+                previewDirectory: URL = PreviewCache.defaultDirectory) {
         self.service = service
         devices = DeviceStore(service: service)
         transfers = TransferQueue(service: service)
-        thumbnails = ThumbnailStore(service: service)
-        previews = PreviewCache(service: service)
+        thumbnails = ThumbnailStore(service: service, directory: thumbnailDirectory)
+        previews = PreviewCache(service: service, directory: previewDirectory)
         // Previews download on the same serial device worker as transfers, so they also make it busy.
         devices.isDeviceBusy = { [weak transfers, weak previews] id in
             transfers?.jobs.contains { $0.deviceID == id && $0.state == .running } == true
