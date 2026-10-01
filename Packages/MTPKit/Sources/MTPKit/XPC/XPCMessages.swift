@@ -20,6 +20,7 @@ enum XPCRequest: Codable, Sendable, Equatable {
     case rename(entry: FileEntry, folder: FolderRef, newName: String)
     case delete(entry: FileEntry, folder: FolderRef)
     case cancel(jobID: UUID)
+    case thumbnail(objectID: UInt32, folder: FolderRef)
 }
 
 enum XPCResponse: Codable, Sendable {
@@ -29,6 +30,7 @@ enum XPCResponse: Codable, Sendable {
     case entry(FileEntry)
     case url(URL)
     case ok
+    case thumbnail(Data?)
     case failure(MTPError)
 }
 

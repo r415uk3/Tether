@@ -14,6 +14,8 @@ public protocol MTPService: Sendable {
     func devices() async throws -> [DeviceInfo]
     func storages(deviceID: DeviceID) async throws -> [StorageInfo]
     func list(_ folder: FolderRef) async throws -> [FileEntry]
+    /// The phone's thumbnail for an object in `folder`, fetched at background priority; nil if none.
+    func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data?
     func download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, into directory: URL) async throws -> URL
     func upload(jobID: UUID, fileURL: URL, to folder: FolderRef, conflict: ConflictResolution) async throws -> FileEntry
     func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry

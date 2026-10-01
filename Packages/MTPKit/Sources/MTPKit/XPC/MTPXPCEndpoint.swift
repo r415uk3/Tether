@@ -55,6 +55,8 @@ public final class MTPXPCEndpoint: NSObject, MTPXPCProtocol, @unchecked Sendable
         case .delete(let entry, let folder):
             try await service.delete(entry, in: folder)
             return .ok
+        case .thumbnail(let objectID, let folder):
+            return .thumbnail(try await service.thumbnail(objectID: objectID, in: folder))
         case .cancel(let jobID):
             await service.cancel(jobID: jobID)
             return .ok

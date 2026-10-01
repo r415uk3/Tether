@@ -201,6 +201,9 @@ private final class FlakyService: MTPService, @unchecked Sendable {
         return try await base.devices()
     }
     func storages(deviceID: DeviceID) async throws -> [StorageInfo] { try await base.storages(deviceID: deviceID) }
+    func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
+        try await base.thumbnail(objectID: objectID, in: folder)
+    }
     func list(_ folder: FolderRef) async throws -> [FileEntry] {
         let hold = lock.withLock { let h = _hold; _hold = false; return h }
         let result = try await base.list(folder)

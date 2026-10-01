@@ -17,6 +17,8 @@ public protocol MTPDevice: AnyObject, Sendable {
     func createFolder(name: String, storageID: UInt32, parentID: UInt32) throws -> FileEntry
     func rename(objectID: UInt32, to newName: String) throws
     func delete(objectID: UInt32) throws
+    /// The phone's own thumbnail for the object (usually JPEG), or nil if it has none.
+    func thumbnail(objectID: UInt32) throws -> Data?
     func close()
 }
 
