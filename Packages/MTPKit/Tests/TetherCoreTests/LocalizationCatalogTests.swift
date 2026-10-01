@@ -6,8 +6,9 @@ private let repo = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent() // Packages/MTPKit
     .deletingLastPathComponent().deletingLastPathComponent()                             // repo root
 
-/// Every String Catalog that ships; Task 3 adds the app's.
+/// Every String Catalog that ships.
 private let catalogs = [
+    "Tether/Localizable.xcstrings",
     "Packages/MTPKit/Sources/MTPKit/Resources/Localizable.xcstrings",
     "Packages/MTPKit/Sources/TetherCore/Resources/Localizable.xcstrings",
 ]
