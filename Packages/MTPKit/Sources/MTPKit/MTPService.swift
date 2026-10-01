@@ -15,11 +15,18 @@ public protocol MTPService: Sendable {
     func storages(deviceID: DeviceID) async throws -> [StorageInfo]
     func list(_ folder: FolderRef) async throws -> [FileEntry]
     func download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, into directory: URL) async throws -> URL
-    func upload(jobID: UUID, fileURL: URL, to folder: FolderRef) async throws -> FileEntry
+    func upload(jobID: UUID, fileURL: URL, to folder: FolderRef, conflict: ConflictResolution) async throws -> FileEntry
     func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry
     func rename(objectID: UInt32, deviceID: DeviceID, to newName: String) async throws
     func delete(objectID: UInt32, deviceID: DeviceID) async throws
     func cancel(jobID: UUID) async
     /// Abandons all device state and in-flight calls, then reconnects. Used by watchdogs.
     func restart() async
+}
+
+public extension MTPService {
+    /// Upload that refuses name clashes (`.fail`).
+    func upload(jobID: UUID, fileURL: URL, to folder: FolderRef) async throws -> FileEntry {
+        try await upload(jobID: jobID, fileURL: fileURL, to: folder, conflict: .fail)
+    }
 }

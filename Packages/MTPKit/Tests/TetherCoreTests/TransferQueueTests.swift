@@ -79,6 +79,43 @@ import MTPKit
         try await eventually { if case .finished = queue.jobs[0].state { true } else { false } }
     }
 
+    @Test func retryAfterReplugUsesStableIdentity() async throws {
+        let provider = FakeDeviceProvider()
+        let phone = FakeDevice(id: "serial-ABC")
+        provider.attach(phone, as: "14-4")
+        let service = LocalMTPService(provider: provider)
+        #expect(try await service.devices().map(\.id) == ["serial-ABC"])
+        let file = phone.addFile("a.txt", data: Data("x".utf8))
+        let queue = TransferQueue(service: service)
+        phone.inject(.fail(.deviceDisconnected))
+        let id = queue.enqueueDownload(file, deviceID: "serial-ABC", into: try makeTempDirectory())
+        try await eventually { queue.jobs[0].state == .failed(.deviceDisconnected) }
+        provider.detach("14-4")
+        await service.rescan()
+        provider.attach(phone, as: "14-7")
+        await service.rescan()
+        queue.retry(id)
+        try await eventually { if case .finished = queue.jobs[0].state { true } else { false } }
+    }
+
+    @Test func reconnectMarksOnlyThatDevicesUnfinishedUploadsStale() async throws {
+        let (queue, _) = try await makeQueue()
+        let dir = try makeTempDirectory()
+        let file = dir.appendingPathComponent("up.txt")
+        try Data("up".utf8).write(to: file)
+        let folder = FolderRef(deviceID: "p1", storageID: 1)
+        let done = queue.enqueueUpload(file, to: folder)
+        try await eventually { if case .finished = queue.jobs[0].state { true } else { false } }
+        device.inject(.fail(.deviceBusy))
+        let failed = queue.enqueueUpload(file, to: folder, conflict: .keepBoth)
+        try await eventually { queue.jobs[1].state == .failed(.deviceBusy) }
+        queue.deviceReconnected("other")
+        #expect(!queue.jobs[1].isStale)
+        queue.deviceReconnected("p1")
+        #expect(queue.jobs.first { $0.id == done }?.isStale == false)
+        #expect(queue.jobs.first { $0.id == failed }?.isStale == true)
+    }
+
     @Test func stalledJobTriggersRestart() async throws {
         let file = device.addFile("a.txt", data: Data("x".utf8))
         let (queue, _) = try await makeQueue()
@@ -131,6 +168,18 @@ import MTPKit
         #expect(provider.openCount("p1") == 1)
         device.releaseHang()
         try await eventually { if case .finished = queue.jobs[0].state { true } else { false } }
+    }
+
+    @Test func uploadCarriesConflictPolicy() async throws {
+        device.addFile("up.txt", data: Data("old".utf8))
+        let (queue, _) = try await makeQueue()
+        let file = try makeTempDirectory().appendingPathComponent("up.txt")
+        try Data("new".utf8).write(to: file)
+        queue.enqueueUpload(file, to: FolderRef(deviceID: "p1", storageID: 1), conflict: .replace)
+        try await eventually { if case .finished = queue.jobs[0].state { true } else { false } }
+        let children = device.children(of: FileEntry.rootID)
+        #expect(children.map(\.name) == ["up.txt"])
+        #expect(device.data(of: children[0].objectID) == Data("new".utf8))
     }
 
     @Test func uploadIsQueuedAndFinishes() async throws {

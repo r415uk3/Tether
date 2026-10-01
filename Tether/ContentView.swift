@@ -10,14 +10,13 @@ struct StorageSelection: Hashable {
 struct ContentView: View {
     @Environment(AppModel.self) private var model
     @State private var selection: StorageSelection?
-    @State private var path: [FileEntry] = []
 
     var body: some View {
         NavigationSplitView {
             SidebarView(selection: $selection)
         } detail: {
             if let selection {
-                BrowserView(selection: selection, path: $path)
+                BrowserView(selection: selection)
                     .id(selection)
             } else {
                 ContentUnavailableView(
@@ -27,11 +26,13 @@ struct ContentView: View {
             }
         }
         .onChange(of: selection) {
-            path = []
             if selection == nil { ensureSelection() } // empty-space click deselects; keep a ready storage selected
         }
         .onChange(of: model.devices.storages, initial: true) { ensureSelection() }
         .onChange(of: model.devices.devices) { ensureSelection() }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) { TransfersButton() }
+        }
     }
 
     private func ensureSelection() {

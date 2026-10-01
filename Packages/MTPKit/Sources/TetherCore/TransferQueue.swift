@@ -7,7 +7,7 @@ import MTPKit
 public final class TransferQueue {
     public enum Kind: Equatable, Sendable {
         case download(FileEntry, deviceID: DeviceID, directory: URL)
-        case upload(URL, folder: FolderRef)
+        case upload(URL, folder: FolderRef, conflict: ConflictResolution)
     }
 
     public enum State: Equatable, Sendable {
@@ -23,18 +23,20 @@ public final class TransferQueue {
         /// Identifies one run of the job to the service; changes on retry.
         var attempt = UUID()
         var lastActivity = ContinuousClock.now
+        /// An upload that predates a reconnect of its device: its folder handle may now name another object.
+        var isStale = false
 
         public var name: String {
             switch kind {
             case .download(let entry, _, _): entry.name
-            case .upload(let url, _): url.lastPathComponent
+            case .upload(let url, _, _): url.lastPathComponent
             }
         }
 
         public var deviceID: DeviceID {
             switch kind {
             case .download(_, let deviceID, _): deviceID
-            case .upload(_, let folder): folder.deviceID
+            case .upload(_, let folder, _): folder.deviceID
             }
         }
 
@@ -66,8 +68,8 @@ public final class TransferQueue {
     }
 
     @discardableResult
-    public func enqueueUpload(_ url: URL, to folder: FolderRef) -> UUID {
-        enqueue(.upload(url, folder: folder), completion: nil)
+    public func enqueueUpload(_ url: URL, to folder: FolderRef, conflict: ConflictResolution = .fail) -> UUID {
+        enqueue(.upload(url, folder: folder, conflict: conflict), completion: nil)
     }
 
     public func cancel(_ id: UUID) {
@@ -93,6 +95,17 @@ public final class TransferQueue {
             pump()
         default:
             break
+        }
+    }
+
+    /// The device became ready again (e.g. after a replug). Android numbers objects afresh for every USB
+    /// connection, so uploads that were waiting or that ended earlier may target a different folder now;
+    /// they fail instead of running. Downloads re-check their entry on the device, so they are left alone.
+    public func deviceReconnected(_ id: DeviceID) {
+        for i in jobs.indices where jobs[i].deviceID == id {
+            guard case .upload = jobs[i].kind else { continue }
+            if case .finished = jobs[i].state { continue }
+            jobs[i].isStale = true // a running upload is still on the old connection and will fail
         }
     }
 
@@ -153,12 +166,13 @@ public final class TransferQueue {
     private func run(_ job: Job) async {
         let result: Result<URL?, MTPError>
         do {
+            if job.isStale { throw Self.staleUploadError }
             switch job.kind {
             case .download(let entry, let deviceID, let directory):
                 result = .success(try await service.download(jobID: job.attempt, entry: entry,
                                                              deviceID: deviceID, into: directory))
-            case .upload(let url, let folder):
-                _ = try await service.upload(jobID: job.attempt, fileURL: url, to: folder)
+            case .upload(let url, let folder, let conflict):
+                _ = try await service.upload(jobID: job.attempt, fileURL: url, to: folder, conflict: conflict)
                 result = .success(nil)
             }
         } catch {
@@ -171,6 +185,11 @@ public final class TransferQueue {
         case .failure(let error): finish(i, .failed(error))
         }
         pump()
+    }
+
+    private static var staleUploadError: MTPError {
+        .underlying(code: -6, message: String(
+            localized: "The phone was reconnected, so this folder may have changed. Upload the item again."))
     }
 
     private func finish(_ i: Int, _ state: State) {

@@ -80,9 +80,21 @@ final class XPCTestHost: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
         withExtendedLifetime(host) {}
     }
 
+    @Test func uploadPolicyCrossesXPC() async throws {
+        device.addFile("a.txt", data: Data("old".utf8))
+        let (client, host) = makeClient()
+        _ = try await client.devices()
+        let file = try makeTempDirectory().appendingPathComponent("a.txt")
+        try Data("new".utf8).write(to: file)
+        let entry = try await client.upload(jobID: UUID(), fileURL: file, to: FolderRef(deviceID: "p1", storageID: 1),
+                                            conflict: .keepBoth)
+        #expect(entry.name == "a 2.txt")
+        withExtendedLifetime(host) {}
+    }
+
     @Test func requestsRoundTripThroughCodec() throws {
         let request = XPCRequest.upload(jobID: UUID(), fileURL: URL(fileURLWithPath: "/tmp/a b.txt"),
-                                        folder: FolderRef(deviceID: "d", storageID: 2, folderID: 9))
+                                        folder: FolderRef(deviceID: "d", storageID: 2, folderID: 9), conflict: .keepBoth)
         let decoded = try XPCCodec.decode(XPCRequest.self, from: XPCCodec.encode(request))
         #expect(decoded == request)
     }

@@ -45,8 +45,8 @@ public final class MTPXPCEndpoint: NSObject, MTPXPCProtocol, @unchecked Sendable
             return .entries(try await service.list(folder))
         case .download(let jobID, let entry, let deviceID, let directory):
             return .url(try await service.download(jobID: jobID, entry: entry, deviceID: deviceID, into: directory))
-        case .upload(let jobID, let fileURL, let folder):
-            return .entry(try await service.upload(jobID: jobID, fileURL: fileURL, to: folder))
+        case .upload(let jobID, let fileURL, let folder, let conflict):
+            return .entry(try await service.upload(jobID: jobID, fileURL: fileURL, to: folder, conflict: conflict))
         case .createFolder(let name, let folder):
             return .entry(try await service.createFolder(named: name, in: folder))
         case .rename(let objectID, let deviceID, let newName):

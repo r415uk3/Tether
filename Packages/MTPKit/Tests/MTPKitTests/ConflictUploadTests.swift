@@ -1,0 +1,170 @@
+import Foundation
+import Testing
+@testable import MTPKit
+
+@Suite struct ConflictUploadTests {
+    let root = FileEntry.rootID
+
+    private func makeFile(_ name: String, _ text: String) throws -> URL {
+        let url = try makeTempDirectory().appendingPathComponent(name)
+        try Data(text.utf8).write(to: url)
+        return url
+    }
+
+    @Test func failPolicyStillRejects() throws {
+        let device = FakeDevice()
+        device.addFile("photo.jpg", data: Data("old".utf8))
+        #expect(throws: MTPError.nameConflict("photo.jpg")) {
+            try Transfers.upload(try makeFile("photo.jpg", "new"), to: device, storageID: 1, parentID: root,
+                                 conflict: .fail) { _, _ in true }
+        }
+    }
+
+    @Test func clashesIgnoreCase() throws {
+        let device = FakeDevice()
+        let original = device.addFile("a.txt", data: Data("old".utf8))
+        #expect(throws: MTPError.nameConflict("A.TXT")) {
+            try Transfers.upload(try makeFile("A.TXT", "new"), to: device, storageID: 1, parentID: root,
+                                 conflict: .fail) { _, _ in true }
+        }
+        device.addFile("A 2.txt", data: Data("older".utf8))
+        let kept = try Transfers.upload(try makeFile("A.TXT", "new"), to: device, storageID: 1, parentID: root,
+                                        conflict: .keepBoth) { _, _ in true }
+        #expect(kept.name == "A 3.TXT")
+        #expect(device.data(of: original.objectID) == Data("old".utf8))
+    }
+
+    @Test func replaceIgnoresCase() throws {
+        let device = FakeDevice()
+        device.addFile("a.txt", data: Data("old".utf8))
+        let entry = try Transfers.upload(try makeFile("A.TXT", "new"), to: device, storageID: 1, parentID: root,
+                                         conflict: .replace) { _, _ in true }
+        let children = device.children(of: root)
+        #expect(children.map(\.name) == ["A.TXT"])
+        #expect(entry.objectID == children[0].objectID)
+        #expect(device.data(of: entry.objectID) == Data("new".utf8))
+    }
+
+    @Test func replaceTemporaryNameIgnoresCase() throws {
+        let device = FakeDevice()
+        device.addFile("a.txt", data: Data("old".utf8))
+        device.addFile("A.TXT.TETHER-UPLOAD", data: Data("stray".utf8))
+        device.failNext(.rename, with: .deviceBusy)
+        var thrown: (any Error)?
+        do {
+            _ = try Transfers.upload(try makeFile("A.TXT", "new"), to: device, storageID: 1, parentID: root,
+                                     conflict: .replace) { _, _ in true }
+        } catch { thrown = error }
+        #expect(thrown != nil)
+        #expect(message(of: thrown!).contains("A.TXT 2.tether-upload"))
+    }
+
+    @Test func policyIsIgnoredWithoutAClash() throws {
+        let device = FakeDevice()
+        let a = try Transfers.upload(try makeFile("a.txt", "a"), to: device, storageID: 1, parentID: root,
+                                     conflict: .replace) { _, _ in true }
+        let b = try Transfers.upload(try makeFile("b.txt", "b"), to: device, storageID: 1, parentID: root,
+                                     conflict: .keepBoth) { _, _ in true }
+        #expect([a.name, b.name] == ["a.txt", "b.txt"])
+        #expect(device.children(of: root).map(\.name) == ["a.txt", "b.txt"])
+    }
+
+    @Test func keepBothUploadsUnderNextFreeName() throws {
+        let device = FakeDevice()
+        device.addFile("photo.jpg", data: Data("old".utf8))
+        device.addFile("photo 2.jpg", data: Data("older".utf8))
+        let entry = try Transfers.upload(try makeFile("photo.jpg", "new"), to: device, storageID: 1, parentID: root,
+                                         conflict: .keepBoth) { _, _ in true }
+        #expect(entry.name == "photo 3.jpg")
+        #expect(device.children(of: root).map(\.name).sorted() == ["photo 2.jpg", "photo 3.jpg", "photo.jpg"])
+        #expect(device.data(of: entry.objectID) == Data("new".utf8))
+    }
+
+    @Test func replaceLeavesOneItemWithNewContents() throws {
+        let device = FakeDevice()
+        device.addFile("photo.jpg", data: Data("old".utf8))
+        let entry = try Transfers.upload(try makeFile("photo.jpg", "new"), to: device, storageID: 1, parentID: root,
+                                         conflict: .replace) { _, _ in true }
+        let children = device.children(of: root)
+        #expect(children.map(\.name) == ["photo.jpg"])
+        #expect(entry.name == "photo.jpg")
+        #expect(entry.objectID == children[0].objectID)
+        #expect(device.data(of: children[0].objectID) == Data("new".utf8))
+    }
+
+    @Test func cancelledReplaceKeepsOriginal() throws {
+        let device = FakeDevice(chunkSize: 4)
+        let original = device.addFile("photo.jpg", data: Data("old".utf8))
+        let url = try makeFile("photo.jpg", String(repeating: "n", count: 40))
+        #expect(throws: MTPError.cancelled) {
+            try Transfers.upload(url, to: device, storageID: 1, parentID: root, conflict: .replace) { done, _ in done < 8 }
+        }
+        #expect(device.children(of: root).map(\.objectID) == [original.objectID])
+        #expect(device.data(of: original.objectID) == Data("old".utf8))
+    }
+
+    @Test func replaceFolderSwapsWholeTree() throws {
+        let device = FakeDevice()
+        let oldAlbum = device.addFolder("Album")
+        device.addFile("old.jpg", data: Data(count: 3), in: oldAlbum.objectID)
+        let dir = try makeTempDirectory()
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("Album"), withIntermediateDirectories: true)
+        try Data(count: 5).write(to: dir.appendingPathComponent("Album/new.jpg"))
+        let album = try Transfers.upload(dir.appendingPathComponent("Album"), to: device, storageID: 1, parentID: root,
+                                         conflict: .replace) { _, _ in true }
+        #expect(device.children(of: root).map(\.name) == ["Album"])
+        #expect(device.children(of: album.objectID).map(\.name) == ["new.jpg"])
+        #expect(album.objectID != oldAlbum.objectID)
+        #expect(!device.children(of: root).contains { $0.objectID == oldAlbum.objectID })
+        #expect(device.children(of: oldAlbum.objectID).isEmpty)
+    }
+
+    private func message(of error: any Error) -> String { MTPError.from(error).localizedDescription }
+
+    @Test func failedDeleteOfOriginalKeepsBothCopies() throws {
+        let device = FakeDevice()
+        let original = device.addFile("photo.jpg", data: Data("old".utf8))
+        device.failNext(.delete, with: .deviceBusy)
+        let url = try makeFile("photo.jpg", "new")
+        var thrown: (any Error)?
+        do { _ = try Transfers.upload(url, to: device, storageID: 1, parentID: root, conflict: .replace) { _, _ in true } }
+        catch { thrown = error }
+        #expect(thrown != nil)
+        #expect(message(of: thrown!).contains("photo.jpg.tether-upload"))
+        #expect(device.data(of: original.objectID) == Data("old".utf8))
+        let copy = device.children(of: root).first { $0.name == "photo.jpg.tether-upload" }
+        #expect(copy != nil)
+        #expect(device.data(of: copy!.objectID) == Data("new".utf8))
+    }
+
+    @Test func failedRenameKeepsNewCopyUnderTemporaryName() throws {
+        let device = FakeDevice()
+        device.addFile("photo.jpg", data: Data("old".utf8))
+        device.failNext(.rename, with: .deviceBusy)
+        let url = try makeFile("photo.jpg", "new")
+        var thrown: (any Error)?
+        do { _ = try Transfers.upload(url, to: device, storageID: 1, parentID: root, conflict: .replace) { _, _ in true } }
+        catch { thrown = error }
+        #expect(thrown != nil)
+        #expect(message(of: thrown!).contains("photo.jpg.tether-upload"))
+        let children = device.children(of: root)
+        #expect(children.map(\.name) == ["photo.jpg.tether-upload"])
+        #expect(device.data(of: children[0].objectID) == Data("new".utf8))
+    }
+
+    @Test func failureOnSecondOriginalNeverDeletesNewCopy() throws {
+        let device = FakeDevice()
+        device.addFile("photo.jpg", data: Data("old1".utf8))
+        let second = device.addFile("photo.jpg", data: Data("old2".utf8))
+        device.failNext(.delete, after: 1, with: .deviceBusy)
+        let url = try makeFile("photo.jpg", "new")
+        #expect(throws: (any Error).self) {
+            try Transfers.upload(url, to: device, storageID: 1, parentID: root, conflict: .replace) { _, _ in true }
+        }
+        let names = device.children(of: root).map(\.name).sorted()
+        #expect(names == ["photo.jpg", "photo.jpg.tether-upload"])
+        #expect(device.children(of: root).contains { $0.objectID == second.objectID })
+        let copy = device.children(of: root).first { $0.name == "photo.jpg.tether-upload" }!
+        #expect(device.data(of: copy.objectID) == Data("new".utf8))
+    }
+}
