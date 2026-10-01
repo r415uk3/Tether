@@ -69,6 +69,15 @@ public final class XPCMTPService: MTPService, @unchecked Sendable {
         _ = try await send(.delete(entry: entry, folder: folder))
     }
 
+    public func diagnostics() async throws -> [String] {
+        guard case .lines(let lines) = try await send(.diagnostics) else { throw MTPError.unexpectedResponse }
+        return lines
+    }
+
+    public func releaseDevice(_ deviceID: DeviceID) async throws {
+        _ = try await send(.releaseDevice(deviceID: deviceID))
+    }
+
     public func cancel(jobID: UUID) async {
         _ = try? await send(.cancel(jobID: jobID))
     }

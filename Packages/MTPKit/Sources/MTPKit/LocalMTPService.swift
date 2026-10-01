@@ -19,9 +19,11 @@ public actor LocalMTPService: MTPService {
     private var hasScanned = false
     private var eventHandler: (@Sendable (ServiceEvent) -> Void)?
     private let cancellations = CancellationRegistry()
+    private let log: DiagnosticLog
 
-    public init(provider: any DeviceProvider) {
+    public init(provider: any DeviceProvider, log: DiagnosticLog = .shared) {
         self.provider = provider
+        self.log = log
     }
 
     public var hasUnavailableDevices: Bool {
@@ -57,6 +59,7 @@ public actor LocalMTPService: MTPService {
 
         for id in Set(infos.keys).union(opening.keys) where !lastAttached.contains(id) {
             generations[id, default: 0] += 1
+            log.record("Device removed", category: "device")
             workers.removeValue(forKey: id)?.shutdown(reason: .deviceDisconnected)
             infos[id] = nil
             publicIDs[id] = nil
@@ -86,11 +89,16 @@ public actor LocalMTPService: MTPService {
                 workers[device.id] = DeviceWorker(device: opened, name: device.model)
                 infos[device.id] = DeviceInfo(id: publicID, manufacturer: opened.info.manufacturer,
                                               model: opened.info.model, state: opened.info.state,
-                                              session: UUID())
+                                              session: UUID(), osVersion: opened.info.osVersion)
+                log.record("Opened \(opened.info.manufacturer) \(opened.info.model) (Android \(opened.info.osVersion ?? "?"))",
+                           category: "device")
             case .failure(let error):
                 guard current else { continue }
+                // Rescans repeat every few seconds while a phone is locked; log only when the state changes.
+                let changed = infos[device.id]?.state != .unavailable(error)
                 infos[device.id] = DeviceInfo(id: device.id, manufacturer: device.manufacturer,
                                               model: device.model, state: .unavailable(error))
+                if changed { log.record("Open failed for \(device.model): \(error.logDescription)", category: "device") }
             }
         }
         hasScanned = true
@@ -98,6 +106,7 @@ public actor LocalMTPService: MTPService {
     }
 
     public func restart() async {
+        log.record("Service restarted", category: "service")
         for worker in workers.values { worker.shutdown(reason: .serviceInterrupted) }
         workers.removeAll()
         infos.removeAll()
@@ -106,6 +115,45 @@ public actor LocalMTPService: MTPService {
         opening.removeAll()
         emit(.interrupted)
         await performScan()
+    }
+
+    public func releaseDevice(_ deviceID: DeviceID) async throws {
+        var signalled = false
+        do {
+            try await attemptRelease(deviceID, signalled: &signalled)
+            log.record("Release requested: signalled=\(signalled), result=ok", category: "device")
+        } catch {
+            log.record("Release requested: signalled=\(signalled), result=\(MTPError.from(error).logDescription)",
+                       category: "device")
+            throw error
+        }
+    }
+
+    private func attemptRelease(_ deviceID: DeviceID, signalled: inout Bool) async throws {
+        await ensureScanned()
+        // Only a phone that is actually held by Image Capture may cause a process to be signalled.
+        switch infos[key(for: deviceID)]?.state {
+        case nil: throw MTPError.deviceDisconnected
+        case .ready?: return
+        case .unavailable(let error)? where error != .claimedByOtherProcess: throw error
+        default: break
+        }
+        let provider = self.provider
+        let released = await Task.detached { provider.releaseClaims() }.value
+        signalled = released
+        guard released else { throw MTPError.claimedByOtherProcess }
+        try? await Task.sleep(for: .milliseconds(500)) // give the agent a moment to let go of the interface
+        await rescan()
+        switch infos[key(for: deviceID)]?.state {
+        case nil: throw MTPError.deviceDisconnected
+        case .unavailable(.claimedByOtherProcess)?: throw MTPError.claimedByOtherProcess
+        default: break
+        }
+    }
+
+    /// Reads only the Sendable log, so a wedged service actor can't block Copy Diagnostics.
+    public nonisolated func diagnostics() async throws -> [String] {
+        log.snapshot()
     }
 
     public func storages(deviceID: DeviceID) async throws -> [StorageInfo] {

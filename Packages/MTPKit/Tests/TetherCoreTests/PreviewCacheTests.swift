@@ -98,4 +98,49 @@ import MTPKit
         let url = try await cache.file(for: file, deviceID: "p1")
         #expect(try Data(contentsOf: url) == Data("x".utf8))
     }
+
+    @Test func cancelAllStopsDownloadsAndFreesTheDevice() async throws {
+        let big = device.addFile("big.bin", data: Data(count: 200 * 1024)) // ~0.4 s with the suite's device
+        let (cache, _) = try await makeCache()
+        let download = Task { try await cache.file(for: big, deviceID: "p1") }
+        try await eventually { cache.isDownloading(deviceID: "p1") }
+        cache.cancelAll()
+        #expect(cache.progress == nil)
+        #expect(!cache.isDownloading(deviceID: "p1"))
+        await #expect(throws: (any Error).self) { try await download.value }
+        let small = device.addFile("a.txt", data: Data("x".utf8))
+        let url = try await cache.file(for: small, deviceID: "p1") // the device is free again
+        #expect(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test func progressTracksTheRunningDownload() async throws {
+        let file = device.addFile("a.bin", data: Data(count: 10 * 1024)) // ~0.2 s
+        provider.attach(device)
+        let service = LocalMTPService(provider: provider)
+        _ = try await service.devices()
+        let cache = PreviewCache(service: service, directory: try makeTempDirectory())
+        let seen = ProgressLog()
+        await service.setEventHandler { event in
+            guard case .progress(let id, _, _) = event else { return }
+            Task { @MainActor in
+                let device = cache.deviceID(forPreviewJob: id)
+                if cache.updateProgress(jobID: id, done: 1, total: 4) {
+                    seen.fractions.append(cache.progress)
+                    seen.devices.append(device)
+                }
+            }
+        }
+        #expect(cache.progress == nil)
+        #expect(cache.updateProgress(jobID: UUID(), done: 1, total: 2) == false) // unknown job
+        let download = Task { try await cache.file(for: file, deviceID: "p1") }
+        try await eventually { !seen.fractions.isEmpty }
+        #expect(seen.devices.first == "p1") // the preview's device is known, so the queue's watchdog can be told
+        #expect(cache.deviceID(forPreviewJob: UUID()) == nil)
+        #expect(seen.fractions.first == 0.25) // the job was known to the cache and progress was published
+        _ = try await download.value
+        #expect(cache.progress == nil) // nothing running any more
+    }
 }
+
+@MainActor
+private final class ProgressLog { var fractions: [Double?] = []; var devices: [DeviceID?] = [] }

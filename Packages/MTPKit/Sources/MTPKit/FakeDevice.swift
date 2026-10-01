@@ -36,8 +36,8 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     public init(id: DeviceID = "fake-1", manufacturer: String = "Google", model: String = "Pixel 9",
                 storages: [StorageInfo] = [StorageInfo(id: 1, name: "Internal shared storage",
                                                        capacity: 128_000_000_000, freeSpace: 64_000_000_000)],
-                chunkSize: Int = 4096, chunkDelay: TimeInterval = 0) {
-        self.info = DeviceInfo(id: id, manufacturer: manufacturer, model: model, state: .ready)
+                chunkSize: Int = 4096, chunkDelay: TimeInterval = 0, osVersion: String? = nil) {
+        self.info = DeviceInfo(id: id, manufacturer: manufacturer, model: model, state: .ready, osVersion: osVersion)
         self.storageList = storages
         self.chunkSize = chunkSize
         self.chunkDelay = chunkDelay

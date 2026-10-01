@@ -47,9 +47,27 @@ extension MTPError: LocalizedError {
         case .serviceInterrupted:
             String(localized: "The connection to the phone was interrupted.")
         case .phoneReconnected:
-            String(localized: "The phone was reconnected. Open the folder again and retry.")
+            String(localized: "The phone was reconnected. Upload the item again from its folder.")
         case .underlying(_, let message):
             message
+        }
+    }
+
+    /// A description for logs and diagnostics: only the kind and code, never names, paths or free-form messages.
+    public var logDescription: String {
+        switch self {
+        case .deviceDisconnected: "deviceDisconnected"
+        case .deviceLocked: "deviceLocked"
+        case .deviceBusy: "deviceBusy"
+        case .claimedByOtherProcess: "claimedByOtherProcess"
+        case .storageFull(let needed, let available): "storageFull(needed: \(needed), available: \(available))"
+        case .nameConflict: "nameConflict"
+        case .notFound: "notFound"
+        case .timeout: "timeout"
+        case .cancelled: "cancelled"
+        case .serviceInterrupted: "serviceInterrupted"
+        case .phoneReconnected: "phoneReconnected"
+        case .underlying(let code, _): "underlying(code: \(code))"
         }
     }
 
