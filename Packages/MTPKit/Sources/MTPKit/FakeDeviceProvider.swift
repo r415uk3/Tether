@@ -5,9 +5,9 @@ public final class FakeDeviceProvider: DeviceProvider, @unchecked Sendable {
         case device(FakeDevice)
         case unavailable(AttachedDevice, MTPError)
 
-        var attached: AttachedDevice {
+        func attached(as key: DeviceID) -> AttachedDevice {
             switch self {
-            case .device(let d): AttachedDevice(id: d.info.id, manufacturer: d.info.manufacturer, model: d.info.model)
+            case .device(let d): AttachedDevice(id: key, manufacturer: d.info.manufacturer, model: d.info.model)
             case .unavailable(let a, _): a
             }
         }
@@ -21,8 +21,11 @@ public final class FakeDeviceProvider: DeviceProvider, @unchecked Sendable {
 
     public init() {}
 
-    /// Attaches (or replaces) a working device.
-    public func attach(_ device: FakeDevice) { lock.withLock { slots[device.info.id] = .device(device) } }
+    /// Attaches (or replaces) a working device under its own ID as transport key.
+    public func attach(_ device: FakeDevice) { attach(device, as: device.info.id) }
+
+    /// Attaches (or replaces) a working device under an explicit USB transport key (simulates a replug).
+    public func attach(_ device: FakeDevice, as key: DeviceID) { lock.withLock { slots[key] = .device(device) } }
 
     /// Attaches a device whose `open` fails with `error` (e.g. a locked phone).
     public func attachUnavailable(_ device: AttachedDevice, error: MTPError) {
@@ -33,7 +36,7 @@ public final class FakeDeviceProvider: DeviceProvider, @unchecked Sendable {
     public func openCount(_ id: DeviceID) -> Int { lock.withLock { opens[id, default: 0] } }
 
     public func attachedDevices() -> [AttachedDevice] {
-        lock.withLock { slots.values.map(\.attached).sorted { $0.id < $1.id } }
+        lock.withLock { slots.map { key, slot in slot.attached(as: key) }.sorted { $0.id < $1.id } }
     }
 
     /// Test seam: the next `count` opens of `id` block (outside the lock) until `releaseOpens(id)`.

@@ -79,6 +79,25 @@ import MTPKit
         try await eventually { if case .finished = queue.jobs[0].state { true } else { false } }
     }
 
+    @Test func retryAfterReplugUsesStableIdentity() async throws {
+        let provider = FakeDeviceProvider()
+        let phone = FakeDevice(id: "serial-ABC")
+        provider.attach(phone, as: "14-4")
+        let service = LocalMTPService(provider: provider)
+        #expect(try await service.devices().map(\.id) == ["serial-ABC"])
+        let file = phone.addFile("a.txt", data: Data("x".utf8))
+        let queue = TransferQueue(service: service)
+        phone.inject(.fail(.deviceDisconnected))
+        let id = queue.enqueueDownload(file, deviceID: "serial-ABC", into: try makeTempDirectory())
+        try await eventually { queue.jobs[0].state == .failed(.deviceDisconnected) }
+        provider.detach("14-4")
+        await service.rescan()
+        provider.attach(phone, as: "14-7")
+        await service.rescan()
+        queue.retry(id)
+        try await eventually { if case .finished = queue.jobs[0].state { true } else { false } }
+    }
+
     @Test func stalledJobTriggersRestart() async throws {
         let file = device.addFile("a.txt", data: Data("x".utf8))
         let (queue, _) = try await makeQueue()

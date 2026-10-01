@@ -8,6 +8,9 @@ public actor LocalMTPService: MTPService {
     private var opening: [DeviceID: Int] = [:]
     /// Bumped whenever a rescan sees the device absent, so a handle opened before an unplug/replug is stale.
     private var generations: [DeviceID: Int] = [:]
+    /// Transport key -> the device's own identity (e.g. "serial-…"), stable across unplug/replug.
+    /// Internal maps stay keyed by transport key; `DeviceInfo.id` and all public calls use the identity.
+    private var publicIDs: [DeviceID: DeviceID] = [:]
     /// Bumped by `restart()`; opens started in an older epoch are discarded.
     private var epoch = 0
     private var lastAttached: Set<DeviceID> = []
@@ -56,6 +59,7 @@ public actor LocalMTPService: MTPService {
             generations[id, default: 0] += 1
             workers.removeValue(forKey: id)?.shutdown(reason: .deviceDisconnected)
             infos[id] = nil
+            publicIDs[id] = nil
         }
 
         for device in attached where workers[device.id] == nil && opening[device.id] == nil {
@@ -75,8 +79,13 @@ public actor LocalMTPService: MTPService {
             switch result {
             case .success(let opened):
                 guard current else { opened.close(); continue }
+                let identity = opened.info.id
+                let taken = publicIDs.contains { $0.key != device.id && $0.value == identity }
+                let publicID = taken ? device.id : identity
+                publicIDs[device.id] = publicID
                 workers[device.id] = DeviceWorker(device: opened, name: device.model)
-                infos[device.id] = opened.info
+                infos[device.id] = DeviceInfo(id: publicID, manufacturer: opened.info.manufacturer,
+                                              model: opened.info.model, state: opened.info.state)
             case .failure(let error):
                 guard current else { continue }
                 infos[device.id] = DeviceInfo(id: device.id, manufacturer: device.manufacturer,
@@ -91,6 +100,7 @@ public actor LocalMTPService: MTPService {
         for worker in workers.values { worker.shutdown(reason: .serviceInterrupted) }
         workers.removeAll()
         infos.removeAll()
+        publicIDs.removeAll()
         epoch += 1
         opening.removeAll()
         emit(.interrupted)
@@ -152,8 +162,9 @@ public actor LocalMTPService: MTPService {
     }
 
     private func worker(_ id: DeviceID) throws -> DeviceWorker {
-        if let worker = workers[id] { return worker }
-        if case .unavailable(let error)? = infos[id]?.state { throw error }
+        let key = publicIDs.first { $0.value == id }?.key ?? id
+        if let worker = workers[key] { return worker }
+        if case .unavailable(let error)? = infos[key]?.state { throw error }
         throw MTPError.deviceDisconnected
     }
 
