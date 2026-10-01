@@ -170,9 +170,11 @@ import Testing
         _ = try await service.devices()
         let folder = FolderRef(deviceID: "p1", storageID: 1)
         let created = try await service.createFolder(named: "New", in: folder)
-        try await service.rename(objectID: created.objectID, deviceID: "p1", to: "Renamed")
+        try await service.rename(created, in: folder, to: "Renamed")
         #expect(try await service.list(folder).map(\.name) == ["Renamed"])
-        try await service.delete(objectID: created.objectID, deviceID: "p1")
+        var renamed = created
+        renamed.name = "Renamed"
+        try await service.delete(renamed, in: folder)
         #expect(try await service.list(folder).isEmpty)
     }
 

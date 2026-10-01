@@ -98,4 +98,16 @@ final class XPCTestHost: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
         let decoded = try XPCCodec.decode(XPCRequest.self, from: XPCCodec.encode(request))
         #expect(decoded == request)
     }
+
+    @Test func thumbnailCrossesXPC() async throws {
+        let photo = device.addFile("a.jpg", data: Data(count: 10))
+        device.setThumbnail(Data("thumb".utf8), for: photo.objectID)
+        let (client, host) = makeClient()
+        _ = try await client.devices()
+        let folder = FolderRef(deviceID: "p1", storageID: 1)
+        #expect(try await client.thumbnail(objectID: photo.objectID, in: folder) == Data("thumb".utf8))
+        let plain = device.addFile("b.txt", data: Data(count: 1))
+        #expect(try await client.thumbnail(objectID: plain.objectID, in: folder) == nil)
+        withExtendedLifetime(host) {}
+    }
 }

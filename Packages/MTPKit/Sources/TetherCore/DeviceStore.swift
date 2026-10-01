@@ -37,13 +37,24 @@ public final class DeviceStore {
         apply(list)
     }
 
+    public func session(for deviceID: DeviceID) -> UUID? {
+        devices.first { $0.id == deviceID && $0.state == .ready }?.session
+    }
+
     public func apply(_ newDevices: [DeviceInfo]) {
-        let readyBefore = Set(devices.filter { $0.state == .ready }.map(\.id))
-        let readyNow = Set(newDevices.filter { $0.state == .ready }.map(\.id))
+        let before = Dictionary(devices.filter { $0.state == .ready }.map { ($0.id, $0.session) },
+                                uniquingKeysWith: { first, _ in first })
+        let now = Dictionary(newDevices.filter { $0.state == .ready }.map { ($0.id, $0.session) },
+                             uniquingKeysWith: { first, _ in first })
+        // Newly ready, or ready again on a new connection (handles from the old one are meaningless).
+        let fresh = Set(now.keys.filter { id in
+            guard let old = before[id] else { return true }
+            return old != now[id]!
+        })
         devices = newDevices
-        storages = storages.filter { readyNow.contains($0.key) }
-        listings = listings.filter { readyNow.contains($0.key.deviceID) }
-        for id in readyNow.subtracting(readyBefore) {
+        storages = storages.filter { now[$0.key] != nil && !fresh.contains($0.key) }
+        listings = listings.filter { key, _ in now[key.deviceID] != nil && !fresh.contains(key.deviceID) }
+        for id in fresh {
             onDeviceBecameReady?(id)
             Task { await loadStorages(id) }
         }
@@ -82,6 +93,12 @@ public final class DeviceStore {
         }
 
         guard generations[folder] == generation else { return }
+        // The phone reconnected while this ran: `apply` already dropped this folder's state.
+        if let folderSession = folder.session, folderSession != session(for: folder.deviceID) {
+            listings[folder] = nil
+            generations[folder] = nil
+            return
+        }
         let deviceAvailable = result.isTimeout ? isKnown(folder.deviceID) : isReady(folder.deviceID)
         guard deviceAvailable else { listings[folder] = nil; return }
         switch result {
@@ -99,14 +116,14 @@ public final class DeviceStore {
     }
 
     public func rename(_ entry: FileEntry, in folder: FolderRef, to newName: String) async throws {
-        do { try await service.rename(objectID: entry.objectID, deviceID: folder.deviceID, to: newName) }
+        do { try await service.rename(entry, in: folder, to: newName) }
         catch { await refresh(folder); throw error }
         await refresh(folder)
     }
 
     public func delete(_ entries: [FileEntry], in folder: FolderRef) async throws {
         do {
-            for entry in entries { try await service.delete(objectID: entry.objectID, deviceID: folder.deviceID) }
+            for entry in entries { try await service.delete(entry, in: folder) }
         } catch {
             await refresh(folder)
             throw error

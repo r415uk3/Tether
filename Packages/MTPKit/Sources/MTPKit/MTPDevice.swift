@@ -9,12 +9,16 @@ public protocol MTPDevice: AnyObject, Sendable {
     var info: DeviceInfo { get }
     func storages() throws -> [StorageInfo]
     func listFolder(storageID: UInt32, folderID: UInt32) throws -> [FileEntry]
+    /// The object's current metadata (GetObjectInfo), or nil if no object has this handle.
+    func objectInfo(objectID: UInt32) throws -> FileEntry?
     func download(objectID: UInt32, to fileURL: URL, progress: ProgressHandler) throws
     func upload(from fileURL: URL, name: String, size: UInt64, storageID: UInt32, parentID: UInt32,
                 progress: ProgressHandler) throws -> FileEntry
     func createFolder(name: String, storageID: UInt32, parentID: UInt32) throws -> FileEntry
     func rename(objectID: UInt32, to newName: String) throws
     func delete(objectID: UInt32) throws
+    /// The phone's own thumbnail for the object (usually JPEG), or nil if it has none.
+    func thumbnail(objectID: UInt32) throws -> Data?
     func close()
 }
 

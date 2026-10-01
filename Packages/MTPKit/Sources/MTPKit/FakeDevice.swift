@@ -27,6 +27,11 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     private var operationFaults: [(operation: Operation, skip: Int, error: MTPError)] = []
     private var disconnected = false
     private var closed = false
+    private var listCalls = 0
+    private var downloadCount = 0
+    private var thumbnails: [UInt32: Data] = [:]
+    private var thumbnailCount = 0
+    private var thumbnailFault: MTPError?
 
     public init(id: DeviceID = "fake-1", manufacturer: String = "Google", model: String = "Pixel 9",
                 storages: [StorageInfo] = [StorageInfo(id: 1, name: "Internal shared storage",
@@ -60,6 +65,8 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     public func data(of objectID: UInt32) -> Data? { lock.withLock { nodes[objectID]?.data } }
     public func storage(_ id: UInt32) -> StorageInfo? { lock.withLock { storageList.first { $0.id == id } } }
     public var isClosed: Bool { lock.withLock { closed } }
+    /// Number of `listFolder` calls so far (tests assert that verification doesn't list).
+    public var listFolderCalls: Int { lock.withLock { listCalls } }
 
     public func children(of parentID: UInt32, storageID: UInt32 = 1) -> [FileEntry] {
         lock.withLock {
@@ -77,12 +84,42 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     }
 
     public func listFolder(storageID: UInt32, folderID: UInt32) throws -> [FileEntry] {
+        lock.withLock { listCalls += 1 }
         try beginSimple()
         try lock.withLock { try requireFolder(folderID) }
         return children(of: folderID, storageID: storageID)
     }
 
+    /// Never consumes injected faults, so a fault injected for a test still hits the operation under test.
+    public func objectInfo(objectID: UInt32) throws -> FileEntry? {
+        try lock.withLock {
+            if disconnected { throw MTPError.deviceDisconnected }
+            return nodes[objectID]?.entry
+        }
+    }
+
+    public func setThumbnail(_ data: Data, for objectID: UInt32) { lock.withLock { thumbnails[objectID] = data } }
+    public var thumbnailCalls: Int { lock.withLock { thumbnailCount } }
+    /// The next `thumbnail` call throws `error` (separate from the general fault queue).
+    public func failNextThumbnail(with error: MTPError) { lock.withLock { thumbnailFault = error } }
+
+    public func thumbnail(objectID: UInt32) throws -> Data? {
+        try lock.withLock {
+            thumbnailCount += 1
+            if disconnected { throw MTPError.deviceDisconnected }
+            if let fault = thumbnailFault {
+                thumbnailFault = nil
+                throw fault
+            }
+            return thumbnails[objectID]
+        }
+    }
+
+    /// How many times `download` has been called (test inspection).
+    public var downloadCalls: Int { lock.withLock { downloadCount } }
+
     public func download(objectID: UInt32, to fileURL: URL, progress: ProgressHandler) throws {
+        lock.withLock { downloadCount += 1 }
         let limit = try beginTransfer()
         guard let data = lock.withLock({ nodes[objectID]?.data }) else { throw MTPError.notFound }
         guard FileManager.default.createFile(atPath: fileURL.path, contents: nil) else {

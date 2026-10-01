@@ -31,6 +31,19 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         return result
     }
 
+    /// Converts a libmtp file record; libmtp reports root children with parent_id 0.
+    private static func entry(from f: UnsafeMutablePointer<LIBMTP_file_t>) -> FileEntry {
+        FileEntry(
+            objectID: f.pointee.item_id,
+            parentID: f.pointee.parent_id == 0 ? FileEntry.rootID : f.pointee.parent_id,
+            storageID: f.pointee.storage_id,
+            name: f.pointee.filename.map { String(cString: $0) } ?? "",
+            size: f.pointee.filesize,
+            modified: f.pointee.modificationdate == 0 ? nil
+                : Date(timeIntervalSince1970: TimeInterval(f.pointee.modificationdate)),
+            isFolder: f.pointee.filetype == LIBMTP_FILETYPE_FOLDER)
+    }
+
     func listFolder(storageID: UInt32, folderID: UInt32) throws -> [FileEntry] {
         let h = try requireHandle()
         LIBMTP_Clear_Errorstack(h)
@@ -38,21 +51,30 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         var file = LIBMTP_Get_Files_And_Folders(h, storageID, folderID)
         while let f = file {
             let next = f.pointee.next
-            entries.append(FileEntry(
-                objectID: f.pointee.item_id,
-                // libmtp reports root items with parent 0; callers list the root as FileEntry.rootID.
-                parentID: f.pointee.parent_id == 0 ? FileEntry.rootID : f.pointee.parent_id,
-                storageID: f.pointee.storage_id,
-                name: f.pointee.filename.map { String(cString: $0) } ?? "",
-                size: f.pointee.filesize,
-                modified: f.pointee.modificationdate == 0 ? nil : Date(timeIntervalSince1970: TimeInterval(f.pointee.modificationdate)),
-                isFolder: f.pointee.filetype == LIBMTP_FILETYPE_FOLDER))
+            entries.append(Self.entry(from: f))
             LIBMTP_destroy_file_t(f)
             file = next
         }
         // An empty folder and a failure both return NULL; the error stack tells them apart.
         if entries.isEmpty, LIBMTP_Get_Errorstack(h) != nil { throw lastError(h) }
         return entries
+    }
+
+    func objectInfo(objectID: UInt32) throws -> FileEntry? {
+        let h = try requireHandle()
+        LIBMTP_Clear_Errorstack(h)
+        guard let f = LIBMTP_Get_Filemetadata(h, objectID) else {
+            // libmtp 1.1.23 returns NULL for a vanished handle and for a dead connection alike, and this call
+            // does not populate the errorstack. Probe the connection to tell them apart.
+            if LIBMTP_Get_Storage(h, 0) != 0 {
+                let error = lastError(h)
+                if case .underlying(let code, _) = error, code == -1 { throw MTPError.deviceDisconnected }
+                throw error
+            }
+            return nil
+        }
+        defer { LIBMTP_destroy_file_t(f) }
+        return Self.entry(from: f)
     }
 
     func download(objectID: UInt32, to fileURL: URL, progress: ProgressHandler) throws {
@@ -111,6 +133,28 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
     func delete(objectID: UInt32) throws {
         let h = try requireHandle()
         if LIBMTP_Delete_Object(h, objectID) != 0 { throw lastError(h) }
+    }
+
+    func thumbnail(objectID: UInt32) throws -> Data? {
+        let h = try requireHandle()
+        LIBMTP_Clear_Errorstack(h)
+        var data: UnsafeMutablePointer<UInt8>?
+        var size: UInt32 = 0
+        let rc = LIBMTP_Get_Thumbnail(h, objectID, &data, &size)
+        defer { if let data { free(data) } }
+        guard rc == 0, let data, size > 0 else {
+            if rc != 0 {
+                // LIBMTP_Get_Thumbnail returns -1 without populating the errorstack, so lastError cannot tell
+                // "no thumbnail" from a dead connection. Probe the connection (as objectInfo does).
+                if LIBMTP_Get_Storage(h, 0) != 0 {
+                    let error = lastError(h)
+                    if case .underlying(let code, _) = error, code == -1 { throw MTPError.deviceDisconnected }
+                    throw error
+                }
+            }
+            return nil // no thumbnail for this object
+        }
+        return Data(bytes: data, count: Int(size))
     }
 
     func close() {

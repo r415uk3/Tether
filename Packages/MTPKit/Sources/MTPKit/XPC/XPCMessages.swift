@@ -17,9 +17,10 @@ enum XPCRequest: Codable, Sendable, Equatable {
     case download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, directory: URL)
     case upload(jobID: UUID, fileURL: URL, folder: FolderRef, conflict: ConflictResolution)
     case createFolder(name: String, folder: FolderRef)
-    case rename(objectID: UInt32, deviceID: DeviceID, newName: String)
-    case delete(objectID: UInt32, deviceID: DeviceID)
+    case rename(entry: FileEntry, folder: FolderRef, newName: String)
+    case delete(entry: FileEntry, folder: FolderRef)
     case cancel(jobID: UUID)
+    case thumbnail(objectID: UInt32, folder: FolderRef)
 }
 
 enum XPCResponse: Codable, Sendable {
@@ -29,6 +30,7 @@ enum XPCResponse: Codable, Sendable {
     case entry(FileEntry)
     case url(URL)
     case ok
+    case thumbnail(Data?)
     case failure(MTPError)
 }
 

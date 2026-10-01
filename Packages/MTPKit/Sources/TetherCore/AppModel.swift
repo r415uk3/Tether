@@ -7,14 +7,20 @@ import MTPKit
 public final class AppModel {
     public let devices: DeviceStore
     public let transfers: TransferQueue
+    public let thumbnails: ThumbnailStore
+    public let previews: PreviewCache
     @ObservationIgnored private let service: any MTPService
 
     public init(service: any MTPService) {
         self.service = service
         devices = DeviceStore(service: service)
         transfers = TransferQueue(service: service)
-        devices.isDeviceBusy = { [weak transfers] id in
-            transfers?.jobs.contains { $0.deviceID == id && $0.state == .running } ?? false
+        thumbnails = ThumbnailStore(service: service)
+        previews = PreviewCache(service: service)
+        // Previews download on the same serial device worker as transfers, so they also make it busy.
+        devices.isDeviceBusy = { [weak transfers, weak previews] id in
+            transfers?.jobs.contains { $0.deviceID == id && $0.state == .running } == true
+                || previews?.isDownloading(deviceID: id) == true
         }
         devices.onDeviceBecameReady = { [weak transfers] id in transfers?.deviceReconnected(id) }
         transfers.onJobFinished = { [weak store = devices] job in
