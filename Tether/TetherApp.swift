@@ -13,6 +13,11 @@ struct TetherApp: App {
                 .task { await model.start() }
                 .frame(minWidth: 720, minHeight: 420)
         }
+        .commands { BrowserCommands() }
+
+        Settings {
+            SettingsView()
+        }
     }
 
     /// `-UseFakeDevices YES` swaps the XPC helper for in-memory demo phones.

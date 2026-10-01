@@ -50,13 +50,13 @@ struct BrowserView: View {
                 ToolbarItem {
                     Button(action: chooseFilesToUpload) { Label("Upload", systemImage: "square.and.arrow.up") }
                 }
-                ToolbarItem { TransfersButton() }
             }
             .task(id: folder) { await model.devices.refresh(folder) }
             .onChange(of: folder) {
                 selectedIDs = []
                 renameRequest = nil
             }
+            .focusedSceneValue(\.browserActions, menuActions)
             .confirmationDialog(deleteTitle, isPresented: isConfirmingDelete) {
                 let items = pendingDelete
                 Button(String(localized: "Delete"), role: .destructive) { delete(items) }
@@ -109,6 +109,20 @@ struct BrowserView: View {
             download: download,
             delete: requestDelete,
             newFolder: newFolder)
+    }
+
+    private var menuActions: BrowserActions {
+        let selected = selectedEntries
+        let editing = isEditingName
+        let goUpAction: (() -> Void)? = path.isEmpty ? nil : { goUp() }
+        let openAction: (() -> Void)? = selected.count == 1 && selected[0].isFolder ? { open(selected[0]) } : nil
+        let downloadAction: (() -> Void)? = selected.isEmpty ? nil : { download(selected) }
+        let renameAction: (() -> Void)? =
+            selected.count == 1 && !editing ? { renameRequest = selected[0].objectID } : nil
+        let deleteAction: (() -> Void)? = selected.isEmpty || editing ? nil : { requestDelete(selected) }
+        return BrowserActions(
+            newFolder: newFolder, refresh: refresh, goUp: goUpAction, open: openAction,
+            download: downloadAction, rename: renameAction, delete: deleteAction)
     }
 
     // MARK: Actions
