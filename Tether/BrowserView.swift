@@ -16,6 +16,8 @@ struct BrowserView: View {
     @State private var pendingDelete: [FileEntry] = []
     @State private var problem: String?
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
+    @AppStorage(SettingsKey.viewMode) private var viewMode = BrowserViewMode.list
+    @State private var renamingEntry: FileEntry?
 
     private var session: UUID? { model.devices.session(for: selection.deviceID) }
 
@@ -36,8 +38,21 @@ struct BrowserView: View {
 
     var body: some View {
         let listing = model.devices.listings[folder]
-        FileTableView(entries: visibleEntries, selection: $selectedIDs, renameRequest: renameRequest, folderKey: folder,
-                      actions: tableActions)
+        Group {
+            switch viewMode {
+            case .icons:
+                FileGridView(entries: visibleEntries, selection: $selectedIDs, folderKey: folder,
+                             thumbnailVersion: model.thumbnails.version,
+                             thumbnail: { entry in
+                                 model.thumbnails.cached(entry, deviceID: selection.deviceID).flatMap(NSImage.init(data:))
+                             },
+                             requestThumbnail: { model.thumbnails.request($0, in: folder) },
+                             actions: tableActions)
+            case .list:
+                FileTableView(entries: visibleEntries, selection: $selectedIDs, renameRequest: renameRequest,
+                              folderKey: folder, actions: tableActions)
+            }
+        }
             .overlay { overlay(for: listing) }
             .navigationTitle(title)
             .navigationSubtitle(listing?.isUpdating == true ? String(localized: "Updating…") : "")
@@ -45,6 +60,14 @@ struct BrowserView: View {
                 ToolbarItem(placement: .navigation) {
                     Button(action: goUp) { Label("Back", systemImage: "chevron.left") }
                         .disabled(path.isEmpty || isEditingName)
+                }
+                ToolbarItem {
+                    Picker("View", selection: $viewMode) {
+                        Label("Icons", systemImage: "square.grid.2x2").tag(BrowserViewMode.icons)
+                        Label("List", systemImage: "list.bullet").tag(BrowserViewMode.list)
+                    }
+                    .pickerStyle(.segmented)
+                    .help("Show items as icons or as a list")
                 }
                 ToolbarItem {
                     Button(action: refresh) { Label("Refresh", systemImage: "arrow.clockwise") }
@@ -75,6 +98,10 @@ struct BrowserView: View {
             } message: {
                 Text(problem ?? "")
             }
+            .sheet(item: $renamingEntry) { entry in
+                RenameSheet(entry: entry) { commitRename(entry, $0) }
+            }
+            .onChange(of: renamingEntry) { isEditingName = renamingEntry != nil }
     }
 
     // MARK: Overlay
@@ -105,7 +132,7 @@ struct BrowserView: View {
             open: open,
             dropFiles: { upload($0, window: $1) },
             makePromise: { FilePromise.provider(for: $0, deviceID: selection.deviceID, queue: model.transfers) },
-            requestRename: { renameRequest = $0.objectID },
+            requestRename: beginRename,
             commitRename: commitRename,
             renameStarted: { renameRequest = nil },
             editingChanged: { editing in
@@ -126,7 +153,7 @@ struct BrowserView: View {
             selected.count == 1 && selected[0].isFolder && !editing ? { open(selected[0]) } : nil
         let downloadAction: (() -> Void)? = selected.isEmpty ? nil : { download(selected) }
         let renameAction: (() -> Void)? =
-            selected.count == 1 && !editing ? { renameRequest = selected[0].objectID } : nil
+            selected.count == 1 && !editing ? { beginRename(selected[0]) } : nil
         let deleteAction: (() -> Void)? = selected.isEmpty || editing ? nil : { requestDelete(selected) }
         return BrowserActions(
             newFolder: newFolder, refresh: refresh, goUp: goUpAction, open: openAction,
@@ -158,10 +185,20 @@ struct BrowserView: View {
             do {
                 let created = try await model.devices.createFolder(named: name, in: folder)
                 selectedIDs = [created.objectID]
-                renameRequest = created.objectID
+                beginRename(created)
             } catch {
                 problem = MTPError.from(error).localizedDescription
             }
+        }
+    }
+
+    private func beginRename(_ entry: FileEntry) {
+        switch viewMode {
+        case .list:
+            renameRequest = entry.objectID
+        case .icons:
+            renameContext = (folder, allEntries)
+            renamingEntry = entry
         }
     }
 

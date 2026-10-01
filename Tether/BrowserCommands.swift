@@ -19,6 +19,7 @@ extension FocusedValues {
 struct BrowserCommands: Commands {
     @FocusedValue(\.browserActions) private var actions
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
+    @AppStorage(SettingsKey.viewMode) private var viewMode = BrowserViewMode.list
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -39,6 +40,11 @@ struct BrowserCommands: Commands {
                 .disabled(actions?.delete == nil)
         }
         CommandGroup(after: .sidebar) {
+            Button("as Icons") { viewMode = .icons }
+                .keyboardShortcut("1")
+            Button("as List") { viewMode = .list }
+                .keyboardShortcut("2")
+            Divider()
             Button("Refresh") { actions?.refresh() }
                 .keyboardShortcut("r")
                 .disabled(actions == nil)
