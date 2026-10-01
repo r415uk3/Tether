@@ -45,6 +45,7 @@ struct FileGridView: NSViewRepresentable {
         scroll.documentView = grid
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
+        coordinator.observeScrolling(of: scroll)
         return scroll
     }
 
@@ -89,6 +90,9 @@ struct FileGridView: NSViewRepresentable {
     final class FileGridItem: NSCollectionViewItem {
         static let identifier = NSUserInterfaceItemIdentifier("FileGridItem")
 
+        /// True once the item shows a phone thumbnail, so refreshes skip it.
+        var hasThumbnail = false
+
         override func loadView() {
             let root = NSView()
             root.wantsLayer = true
@@ -98,7 +102,8 @@ struct FileGridView: NSViewRepresentable {
             let label = NSTextField(wrappingLabelWithString: "")
             label.alignment = .center
             label.maximumNumberOfLines = 2
-            label.lineBreakMode = .byTruncatingMiddle
+            label.lineBreakMode = .byCharWrapping
+            label.cell?.truncatesLastVisibleLine = true
             label.font = .systemFont(ofSize: 12)
             label.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(image)
@@ -137,6 +142,31 @@ struct FileGridView: NSViewRepresentable {
         private var isApplyingSelection = false
         private var thumbnailVersion = -1
         private var menuTargets: [FileEntry] = []
+        private var lastEntries: [FileEntry]?
+        private var isLiveScrolling = false
+
+        func observeScrolling(of scroll: NSScrollView) {
+            NotificationCenter.default.addObserver(self, selector: #selector(liveScrollStarted),
+                                                   name: NSScrollView.willStartLiveScrollNotification, object: scroll)
+            NotificationCenter.default.addObserver(self, selector: #selector(liveScrollEnded),
+                                                   name: NSScrollView.didEndLiveScrollNotification, object: scroll)
+        }
+
+        @objc private func liveScrollStarted() { isLiveScrolling = true }
+
+        @objc private func liveScrollEnded() {
+            isLiveScrolling = false
+            requestVisibleThumbnails()
+        }
+
+        /// Only visible items are worth a phone round-trip; the queue is FIFO.
+        private func requestVisibleThumbnails() {
+            guard let grid else { return }
+            for case let item as FileGridItem in grid.visibleItems() {
+                guard !item.hasThumbnail, let path = grid.indexPath(for: item), rows.indices.contains(path.item) else { continue }
+                parent.requestThumbnail(rows[path.item])
+            }
+        }
 
         init(parent: FileGridView) { self.parent = parent }
 
@@ -149,6 +179,8 @@ struct FileGridView: NSViewRepresentable {
         }
 
         func show(_ entries: [FileEntry]) {
+            guard entries != lastEntries else { return }
+            lastEntries = entries
             let sorted = entries.sorted { a, b in
                 if a.isFolder != b.isFolder { return a.isFolder }
                 return a.name.localizedStandardCompare(b.name) == .orderedAscending
@@ -166,7 +198,9 @@ struct FileGridView: NSViewRepresentable {
             thumbnailVersion = version
             for case let item as FileGridItem in grid.visibleItems() {
                 guard let path = grid.indexPath(for: item), rows.indices.contains(path.item) else { continue }
-                item.imageView?.image = image(for: rows[path.item])
+                guard !item.hasThumbnail, let thumb = parent.thumbnail(rows[path.item]) else { continue }
+                item.imageView?.image = thumb
+                item.hasThumbnail = true
             }
         }
 
@@ -216,13 +250,14 @@ struct FileGridView: NSViewRepresentable {
             let item = collectionView.makeItem(withIdentifier: FileGridItem.identifier, for: indexPath)
             let entry = rows[indexPath.item]
             item.textField?.stringValue = entry.name
-            item.imageView?.image = image(for: entry)
-            parent.requestThumbnail(entry)
+            let thumb = parent.thumbnail(entry)
+            item.imageView?.image = thumb ?? icon(for: entry)
+            (item as? FileGridItem)?.hasThumbnail = thumb != nil
+            if thumb == nil, !isLiveScrolling { parent.requestThumbnail(entry) }
             return item
         }
 
-        private func image(for entry: FileEntry) -> NSImage {
-            if let thumb = parent.thumbnail(entry) { return thumb }
+        private func icon(for entry: FileEntry) -> NSImage {
             let type: UTType = entry.isFolder
                 ? .folder
                 : UTType(filenameExtension: (entry.name as NSString).pathExtension) ?? .data
