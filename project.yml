@@ -4,6 +4,7 @@ options:
   deploymentTarget:
     macOS: "15.0"
   createIntermediateGroups: true
+  developmentLanguage: en
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -27,6 +28,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.tether.Tether
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Tether
+        INFOPLIST_KEY_CFBundleLocalizations: "en ru"
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
     dependencies:
       - package: MTPKit

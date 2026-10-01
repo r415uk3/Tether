@@ -21,7 +21,7 @@ struct NoPhoneView: View {
 
     private func step(_ number: Int, _ text: LocalizedStringKey) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text("\(number)")
+            Text(number, format: .number)
                 .font(.callout.bold())
                 .frame(width: 22, height: 22)
                 .background(Circle().fill(.tint.opacity(0.2)))

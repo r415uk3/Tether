@@ -189,7 +189,9 @@ struct BrowserView: View {
         if let fraction = model.previews.progress {
             return String(localized: "Preparing preview… \(Int(fraction * 100))%")
         }
-        return listing?.isUpdating == true ? String(localized: "Updating…") : ""
+        if listing?.isUpdating == true { return String(localized: "Updating…") }
+        guard listing != nil else { return "" }
+        return String(localized: "\(visibleEntries.count) items")
     }
 
     private func goUp() {
