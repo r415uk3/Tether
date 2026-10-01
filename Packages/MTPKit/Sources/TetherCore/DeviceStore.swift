@@ -31,6 +31,16 @@ public final class DeviceStore {
         self.service = service
     }
 
+    /// Asks the service to free a phone held by Image Capture; returns the error if it stays held.
+    public func release(_ id: DeviceID) async -> MTPError? {
+        do {
+            try await service.releaseDevice(id)
+            return nil
+        } catch {
+            return MTPError.from(error)
+        }
+    }
+
     public func reloadDevices() async {
         // A transient failure must not wipe known devices, storages and cached listings.
         guard let list = try? await service.devices() else { return }

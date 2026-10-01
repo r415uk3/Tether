@@ -38,4 +38,10 @@ public struct AttachedDevice: Hashable, Sendable {
 public protocol DeviceProvider: Sendable {
     func attachedDevices() -> [AttachedDevice]
     func open(_ device: AttachedDevice) throws -> any MTPDevice
+    /// Frees phones held by other apps (Image Capture). Returns true if anything was released.
+    func releaseClaims() -> Bool
+}
+
+public extension DeviceProvider {
+    func releaseClaims() -> Bool { false }
 }

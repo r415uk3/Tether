@@ -4,10 +4,12 @@ public final class FakeDeviceProvider: DeviceProvider, @unchecked Sendable {
     private enum Slot {
         case device(FakeDevice)
         case unavailable(AttachedDevice, MTPError)
+        case claimed(FakeDevice, releasable: Bool)
 
         func attached(as key: DeviceID) -> AttachedDevice {
             switch self {
-            case .device(let d): AttachedDevice(id: key, manufacturer: d.info.manufacturer, model: d.info.model)
+            case .device(let d), .claimed(let d, _):
+                AttachedDevice(id: key, manufacturer: d.info.manufacturer, model: d.info.model)
             case .unavailable(let a, _): a
             }
         }
@@ -18,6 +20,7 @@ public final class FakeDeviceProvider: DeviceProvider, @unchecked Sendable {
     private var opens: [DeviceID: Int] = [:]
     private var heldOpens: [DeviceID: Int] = [:]
     private var gates: [DeviceID: [DispatchSemaphore]] = [:]
+    private var releases = 0
 
     public init() {}
 
@@ -30,6 +33,28 @@ public final class FakeDeviceProvider: DeviceProvider, @unchecked Sendable {
     /// Attaches a device whose `open` fails with `error` (e.g. a locked phone).
     public func attachUnavailable(_ device: AttachedDevice, error: MTPError) {
         lock.withLock { slots[device.id] = .unavailable(device, error) }
+    }
+
+    /// Attaches a device that another app holds until `releaseClaims()` (if `releasable`).
+    public func attachClaimed(_ device: FakeDevice, as key: DeviceID? = nil, releasable: Bool = true) {
+        lock.withLock { slots[key ?? device.info.id] = .claimed(device, releasable: releasable) }
+    }
+
+    public var releaseClaimsCalls: Int { lock.withLock { releases } }
+
+    public func releaseClaims() -> Bool {
+        lock.withLock {
+            releases += 1
+            var released = false
+            for (key, slot) in slots {
+                if case .claimed(let device, true) = slot {
+                    slots[key] = .device(device)
+                    released = true
+                }
+            }
+            // A non-releasable claim still "signals" the agent but the phone stays held.
+            return released || slots.values.contains { if case .claimed = $0 { true } else { false } }
+        }
     }
 
     public func detach(_ id: DeviceID) { lock.withLock { slots[id] = nil } }
@@ -64,6 +89,7 @@ public final class FakeDeviceProvider: DeviceProvider, @unchecked Sendable {
             switch slots[device.id] {
             case .device(let d): return (.success(d), gate)
             case .unavailable(_, let error): return (.failure(error), gate)
+            case .claimed: return (.failure(.claimedByOtherProcess), gate)
             case nil: return (.failure(.deviceDisconnected), gate)
             }
         }
