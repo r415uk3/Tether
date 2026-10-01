@@ -97,4 +97,37 @@ import Testing
         }
         #expect(device.children(of: root).isEmpty)
     }
+
+    @Test func skipsSymbolicLinksInsideFolder() throws {
+        let device = FakeDevice()
+        let outside = try makeTempDirectory()
+        _ = try makeFile("x.txt", bytes: 50, in: outside)
+        _ = try makeFile("deep/y.txt", bytes: 60, in: outside)
+        let dir = try makeTempDirectory()
+        _ = try makeFile("Album/real.jpg", bytes: 100, in: dir)
+        _ = try makeFile("Album/sub/inner.jpg", bytes: 100, in: dir)
+        let fm = FileManager.default
+        try fm.createSymbolicLink(at: dir.appendingPathComponent("Album/sub/link.txt"),
+                                  withDestinationURL: outside.appendingPathComponent("x.txt"))
+        try fm.createSymbolicLink(at: dir.appendingPathComponent("Album/dirlink"),
+                                  withDestinationURL: outside.appendingPathComponent("deep"))
+        let album = try Transfers.upload(dir.appendingPathComponent("Album"), to: device, storageID: 1, parentID: root) { _, _ in true }
+        let children = device.children(of: album.objectID)
+        #expect(children.map(\.name).sorted() == ["real.jpg", "sub"])
+        let sub = try #require(children.first { $0.name == "sub" })
+        #expect(device.children(of: sub.objectID).map(\.name) == ["inner.jpg"])
+    }
+
+    @Test func progressIsCumulativeAcrossFiles() throws {
+        let device = FakeDevice(chunkSize: 100)
+        let dir = try makeTempDirectory()
+        _ = try makeFile("Album/a.jpg", bytes: 1000, in: dir)
+        _ = try makeFile("Album/b.jpg", bytes: 700, in: dir)
+        let log = Log<(UInt64, UInt64)>()
+        _ = try Transfers.upload(dir.appendingPathComponent("Album"), to: device, storageID: 1, parentID: root) { d, t in log.append((d, t)); return true }
+        let dones = log.items.map(\.0)
+        #expect(dones == dones.sorted())
+        #expect(log.items.allSatisfy { $0.1 == 1700 })
+        #expect(log.items.last! == (1700, 1700))
+    }
 }
