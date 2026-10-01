@@ -23,6 +23,7 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
     func toggle(_ entries: [FileEntry], deviceID: DeviceID, cache: PreviewCache,
                 onError: @escaping @MainActor (MTPError) -> Void) {
         if QLPreviewPanel.sharedPreviewPanelExists(), let panel = QLPreviewPanel.shared(), panel.isVisible {
+            invalidate() // a pending selection-follow download must not reopen the panel
             panel.orderOut(nil)
             return
         }
@@ -36,9 +37,9 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
     /// Shows the files (folders are skipped), replacing whatever the panel shows; never closes it.
     func show(_ entries: [FileEntry], deviceID: DeviceID, cache: PreviewCache,
               onError: @escaping @MainActor (MTPError) -> Void) {
+        invalidate() // a download for the previous selection must not land after this one
         let files = entries.filter { !$0.isFolder }
         guard !files.isEmpty else { return }
-        latestRequest += 1
         let request = latestRequest
         pendingRequest = request
         Task {
@@ -70,6 +71,7 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
     private func present(_ panel: QLPreviewPanel) {
         if panel.isVisible, panel.currentController != nil {
             panel.reloadData()
+            if !urls.indices.contains(panel.currentPreviewItemIndex) { panel.currentPreviewItemIndex = 0 }
             return
         }
         // The panel finds its controller by walking the responder chain from the key window.
@@ -101,6 +103,7 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
 
     /// Called from the controlling view's `endPreviewPanelControl`.
     func detach(_ panel: QLPreviewPanel, from view: NSView) {
+        invalidate() // endPreviewPanelControl runs on any close
         if controllingView === view { controllingView = nil }
         if panel.dataSource === self { panel.dataSource = nil }
         if panel.delegate === self { panel.delegate = nil }
@@ -108,7 +111,10 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
 
     /// Once the panel is key it receives Space and arrows; hand them back to the list or grid.
     nonisolated func previewPanel(_ panel: QLPreviewPanel!, handle event: NSEvent!) -> Bool {
-        guard event.type == .keyDown else { return false }
+        // Only Space and up/down go to the list or grid; Esc and left/right stay with the panel.
+        let plain = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            .subtracting([.numericPad, .function]).isEmpty
+        guard event.type == .keyDown, plain, [49, 125, 126].contains(event.keyCode) else { return false }
         nonisolated(unsafe) let keyEvent: NSEvent = event // delivered on the main thread
         return MainActor.assumeIsolated {
             guard let view = controllingView else { return false }
