@@ -117,8 +117,8 @@ struct FileTableView: NSViewRepresentable {
         }
 
         override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
-        override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) { QuickLookController.shared.attach(panel) }
-        override func endPreviewPanelControl(_ panel: QLPreviewPanel!) { QuickLookController.shared.detach(panel) }
+        override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) { QuickLookController.shared.attach(panel, from: self) }
+        override func endPreviewPanelControl(_ panel: QLPreviewPanel!) { QuickLookController.shared.detach(panel, from: self) }
     }
 
     @MainActor
