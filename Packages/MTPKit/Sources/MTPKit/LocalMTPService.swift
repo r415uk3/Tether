@@ -4,7 +4,12 @@ public actor LocalMTPService: MTPService {
     private let provider: any DeviceProvider
     private var workers: [DeviceID: DeviceWorker] = [:]
     private var infos: [DeviceID: DeviceInfo] = [:]
-    private var opening: Set<DeviceID> = []
+    /// In-flight opens: device -> epoch of the restart generation that started the open.
+    private var opening: [DeviceID: Int] = [:]
+    /// Bumped whenever a rescan sees the device absent, so a handle opened before an unplug/replug is stale.
+    private var generations: [DeviceID: Int] = [:]
+    /// Bumped by `restart()`; opens started in an older epoch are discarded.
+    private var epoch = 0
     private var lastAttached: Set<DeviceID> = []
     private var hasScanned = false
     private var eventHandler: (@Sendable (ServiceEvent) -> Void)?
@@ -32,25 +37,33 @@ public actor LocalMTPService: MTPService {
         let attached = provider.attachedDevices()
         lastAttached = Set(attached.map(\.id))
 
-        for id in Array(infos.keys) where !lastAttached.contains(id) {
+        for id in Set(infos.keys).union(opening.keys) where !lastAttached.contains(id) {
+            generations[id, default: 0] += 1
             workers.removeValue(forKey: id)?.shutdown(reason: .deviceDisconnected)
             infos[id] = nil
         }
 
-        for device in attached where workers[device.id] == nil && !opening.contains(device.id) {
-            opening.insert(device.id)
+        for device in attached where workers[device.id] == nil && opening[device.id] == nil {
+            guard lastAttached.contains(device.id) else { continue } // removed by a concurrent rescan
+            let startEpoch = epoch
+            let generation = generations[device.id, default: 0]
+            opening[device.id] = startEpoch
             let provider = self.provider
             let result = await Task.detached { () -> Result<any MTPDevice, MTPError> in
                 do { return .success(try provider.open(device)) } catch { return .failure(MTPError.from(error)) }
             }.value
-            opening.remove(device.id)
+            if opening[device.id] == startEpoch { opening[device.id] = nil }
 
+            // Reentrancy: the device may have been unplugged/replugged or the service restarted while opening.
+            let current = epoch == startEpoch && lastAttached.contains(device.id)
+                && generations[device.id, default: 0] == generation && workers[device.id] == nil
             switch result {
             case .success(let opened):
-                guard lastAttached.contains(device.id) else { opened.close(); continue } // unplugged while opening
+                guard current else { opened.close(); continue }
                 workers[device.id] = DeviceWorker(device: opened, name: device.model)
                 infos[device.id] = opened.info
             case .failure(let error):
+                guard current else { continue }
                 infos[device.id] = DeviceInfo(id: device.id, manufacturer: device.manufacturer,
                                               model: device.model, state: .unavailable(error))
             }
@@ -62,6 +75,8 @@ public actor LocalMTPService: MTPService {
         for worker in workers.values { worker.shutdown(reason: .serviceInterrupted) }
         workers.removeAll()
         infos.removeAll()
+        epoch += 1
+        opening.removeAll()
         emit(.interrupted)
         await rescan()
     }

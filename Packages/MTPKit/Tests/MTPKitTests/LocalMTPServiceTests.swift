@@ -144,4 +144,72 @@ import Testing
         let entry = try await service.upload(jobID: UUID(), fileURL: file, to: FolderRef(deviceID: "p1", storageID: 1))
         #expect(device.data(of: entry.objectID) == Data("hi".utf8))
     }
+
+    @Test func detachDuringHeldOpenLeavesNoGhost() async throws {
+        provider.attach(device)
+        provider.holdOpens("p1")
+        let service = await makeService()
+        let provider = self.provider
+        let scan = Task { await service.rescan() }
+        try await eventually { provider.openCount("p1") == 1 }
+        provider.detach("p1")
+        await service.rescan()
+        provider.releaseOpens("p1")
+        await scan.value
+        #expect(try await service.devices().isEmpty)
+        #expect(!(await service.hasUnavailableDevices))
+    }
+
+    @Test func detachDuringHeldOpenDiscardsFailedOpen() async throws {
+        provider.attachUnavailable(AttachedDevice(id: "p1", manufacturer: "Google", model: "Pixel 9"), error: .deviceLocked)
+        provider.holdOpens("p1")
+        let service = await makeService()
+        let provider = self.provider
+        let scan = Task { await service.rescan() }
+        try await eventually { provider.openCount("p1") == 1 }
+        provider.detach("p1")
+        await service.rescan()
+        provider.releaseOpens("p1")
+        await scan.value
+        #expect(try await service.devices().isEmpty)
+        #expect(!(await service.hasUnavailableDevices))
+    }
+
+    @Test func replugDuringHeldOpenDiscardsStaleHandle() async throws {
+        provider.attach(device)
+        provider.holdOpens("p1")
+        let service = await makeService()
+        let provider = self.provider
+        let scan = Task { await service.rescan() }
+        try await eventually { provider.openCount("p1") == 1 }
+        provider.detach("p1")
+        await service.rescan()
+        provider.attach(device)
+        await service.rescan()
+        provider.releaseOpens("p1")
+        await scan.value
+        #expect(try await service.devices().isEmpty)
+        await service.rescan()
+        #expect(provider.openCount("p1") == 2)
+        #expect(try await service.devices().first?.state == .ready)
+        #expect(try await service.devices().count == 1)
+    }
+
+    @Test func restartRecoversHungOpen() async throws {
+        provider.attach(device)
+        provider.holdOpens("p1")
+        let service = await makeService()
+        let provider = self.provider
+        let scan = Task { await service.rescan() }
+        try await eventually { provider.openCount("p1") == 1 }
+        await service.restart()
+        #expect(provider.openCount("p1") == 2)
+        #expect(try await service.devices().first?.state == .ready)
+        provider.releaseOpens("p1")
+        await scan.value
+        let devices = try await service.devices()
+        #expect(devices.count == 1)
+        #expect(devices.first?.state == .ready)
+        #expect(try await service.list(FolderRef(deviceID: "p1", storageID: 1)).isEmpty)
+    }
 }

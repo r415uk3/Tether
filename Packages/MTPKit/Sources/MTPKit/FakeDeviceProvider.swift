@@ -16,6 +16,8 @@ public final class FakeDeviceProvider: DeviceProvider, @unchecked Sendable {
     private let lock = NSLock()
     private var slots: [DeviceID: Slot] = [:]
     private var opens: [DeviceID: Int] = [:]
+    private var heldOpens: [DeviceID: Int] = [:]
+    private var gates: [DeviceID: [DispatchSemaphore]] = [:]
 
     public init() {}
 
@@ -34,15 +36,36 @@ public final class FakeDeviceProvider: DeviceProvider, @unchecked Sendable {
         lock.withLock { slots.values.map(\.attached).sorted { $0.id < $1.id } }
     }
 
+    /// Test seam: the next `count` opens of `id` block (outside the lock) until `releaseOpens(id)`.
+    /// The open's outcome is decided when it starts, before blocking.
+    public func holdOpens(_ id: DeviceID, count: Int = 1) { lock.withLock { heldOpens[id] = count } }
+
+    /// Unblocks every open currently held for `id` and stops holding further opens.
+    public func releaseOpens(_ id: DeviceID) {
+        let waiting = lock.withLock { () -> [DispatchSemaphore] in
+            heldOpens[id] = nil
+            return gates.removeValue(forKey: id) ?? []
+        }
+        waiting.forEach { $0.signal() }
+    }
+
     public func open(_ device: AttachedDevice) throws -> any MTPDevice {
-        try lock.withLock {
+        let (outcome, gate) = lock.withLock { () -> (Result<any MTPDevice, MTPError>, DispatchSemaphore?) in
             opens[device.id, default: 0] += 1
+            var gate: DispatchSemaphore?
+            if let remaining = heldOpens[device.id], remaining > 0 {
+                heldOpens[device.id] = remaining - 1
+                gate = DispatchSemaphore(value: 0)
+                gates[device.id, default: []].append(gate!)
+            }
             switch slots[device.id] {
-            case .device(let d): return d
-            case .unavailable(_, let error): throw error
-            case nil: throw MTPError.deviceDisconnected
+            case .device(let d): return (.success(d), gate)
+            case .unavailable(_, let error): return (.failure(error), gate)
+            case nil: return (.failure(.deviceDisconnected), gate)
             }
         }
+        gate?.wait()
+        return try outcome.get()
     }
 
     /// Two demo phones: a working Pixel with sample folders and a locked Galaxy.
