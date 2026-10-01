@@ -11,6 +11,8 @@ public actor LocalMTPService: MTPService {
     /// Bumped by `restart()`; opens started in an older epoch are discarded.
     private var epoch = 0
     private var lastAttached: Set<DeviceID> = []
+    /// The first scan is shared: concurrent first callers all await the same task.
+    private var firstScan: Task<Void, Never>?
     private var hasScanned = false
     private var eventHandler: (@Sendable (ServiceEvent) -> Void)?
     private let cancellations = CancellationRegistry()
@@ -28,12 +30,24 @@ public actor LocalMTPService: MTPService {
     }
 
     public func devices() async throws -> [DeviceInfo] {
-        if !hasScanned { await rescan() }
+        await ensureScanned()
         return sortedDevices()
     }
 
     public func rescan() async {
-        hasScanned = true
+        await performScan()
+    }
+
+    /// Joins the shared first scan; concurrent first callers all await the same task.
+    private func ensureScanned() async {
+        guard !hasScanned else { return }
+        if firstScan == nil {
+            firstScan = Task { await self.performScan() }
+        }
+        await firstScan?.value
+    }
+
+    private func performScan() async {
         let attached = provider.attachedDevices()
         lastAttached = Set(attached.map(\.id))
 
@@ -68,6 +82,7 @@ public actor LocalMTPService: MTPService {
                                               model: device.model, state: .unavailable(error))
             }
         }
+        hasScanned = true
         emit(.devicesChanged(sortedDevices()))
     }
 
@@ -78,7 +93,7 @@ public actor LocalMTPService: MTPService {
         epoch += 1
         opening.removeAll()
         emit(.interrupted)
-        await rescan()
+        await performScan()
     }
 
     public func storages(deviceID: DeviceID) async throws -> [StorageInfo] {
@@ -131,7 +146,7 @@ public actor LocalMTPService: MTPService {
 
     /// With `scanning`, a service that has never scanned (e.g. a freshly relaunched helper) scans first.
     private func worker(_ id: DeviceID, scanning: Bool) async throws -> DeviceWorker {
-        if scanning && !hasScanned { await rescan() }
+        if scanning { await ensureScanned() }
         return try worker(id)
     }
 

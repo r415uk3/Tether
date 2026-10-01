@@ -50,7 +50,7 @@ public final class TransferQueue {
 
     @ObservationIgnored private let service: any MTPService
     @ObservationIgnored private var completions: [UUID: Completion] = [:]
-    @ObservationIgnored private var isRestarting = false
+    @ObservationIgnored private var restartsInFlight = 0
     @ObservationIgnored private var watchdog: Task<Void, Never>?
 
     public init(service: any MTPService) {
@@ -120,9 +120,9 @@ public final class TransferQueue {
         let stalled = jobs.contains { $0.state == .running && now - $0.lastActivity > stallTimeout }
         guard stalled else { return }
         for i in jobs.indices where jobs[i].state == .running { jobs[i].lastActivity = now }
-        isRestarting = true
+        restartsInFlight += 1
         await service.restart()
-        isRestarting = false
+        restartsInFlight -= 1
         pump()
     }
 
@@ -139,7 +139,7 @@ public final class TransferQueue {
     private func index(_ id: UUID) -> Int? { jobs.firstIndex { $0.id == id } }
 
     private func pump() {
-        guard !isRestarting else { return } // the device is reopening; queued jobs would fail as disconnected
+        guard restartsInFlight == 0 else { return } // the device is reopening; queued jobs would fail as disconnected
         var busy = Set(jobs.filter { $0.state == .running }.map(\.deviceID))
         for i in jobs.indices where jobs[i].state == .queued && !busy.contains(jobs[i].deviceID) {
             busy.insert(jobs[i].deviceID)

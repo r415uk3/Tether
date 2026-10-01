@@ -45,6 +45,22 @@ import Testing
         #expect(entries.map(\.name) == ["a.txt"])
     }
 
+    @Test func concurrentFirstCallsShareOneScan() async throws {
+        provider.attach(device)
+        device.addFile("a.txt", data: Data("x".utf8))
+        provider.holdOpens("p1")
+        let service = LocalMTPService(provider: provider)
+        let provider = self.provider
+        let listing = Task { try await service.list(FolderRef(deviceID: "p1", storageID: 1)) }
+        let devices = Task { try await service.devices() }
+        try await eventually { provider.openCount("p1") == 1 }
+        try await Task.sleep(for: .milliseconds(50))
+        provider.releaseOpens("p1")
+        #expect(try await listing.value.map(\.name) == ["a.txt"])
+        #expect(try await devices.value.map(\.id) == ["p1"])
+        #expect(provider.openCount("p1") == 1)
+    }
+
     @Test func listsFolders() async throws {
         provider.attach(device)
         device.addFolder("DCIM")
