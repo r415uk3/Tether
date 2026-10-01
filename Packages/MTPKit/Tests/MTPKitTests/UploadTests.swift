@@ -36,6 +36,32 @@ import Testing
         #expect(device.children(of: sub.objectID).map(\.name) == ["b.jpg"])
     }
 
+    @Test func folderUploadReportsProgressAfterEachFolder() throws {
+        let device = FakeDevice()
+        let dir = try makeTempDirectory()
+        _ = try makeFile("Album/sub/deep/b.jpg", bytes: 200, in: dir)
+        var calls = 0
+        _ = try Transfers.upload(dir.appendingPathComponent("Album"), to: device, storageID: 1, parentID: root) { done, _ in
+            if done == 0 { calls += 1 }
+            return true
+        }
+        #expect(calls >= 3) // Album, sub, deep
+    }
+
+    @Test func cancelDuringFolderCreationDeletesPartialFolder() throws {
+        let device = FakeDevice()
+        let dir = try makeTempDirectory()
+        _ = try makeFile("Album/sub/b.jpg", bytes: 200, in: dir)
+        var calls = 0
+        #expect(throws: MTPError.cancelled) {
+            try Transfers.upload(dir.appendingPathComponent("Album"), to: device, storageID: 1, parentID: root) { _, _ in
+                calls += 1
+                return calls < 2 // cancel after the second folder is created
+            }
+        }
+        #expect(device.children(of: root).isEmpty)
+    }
+
     @Test func rejectsWhenStorageFull() throws {
         let device = FakeDevice(storages: [StorageInfo(id: 1, name: "S", capacity: 10_000, freeSpace: 1000)])
         let file = try makeFile("a.bin", bytes: 2000, in: try makeTempDirectory())
