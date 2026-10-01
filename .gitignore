@@ -1,0 +1,8 @@
+.DS_Store
+Tether.xcodeproj/
+DerivedData/
+.build/
+.swiftpm/
+Vendor/build/
+Vendor/.cache/
+Vendor/.work/
