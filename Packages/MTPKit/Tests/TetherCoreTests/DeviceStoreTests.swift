@@ -15,6 +15,23 @@ import MTPKit
         return (DeviceStore(service: service), service)
     }
 
+    @Test func hasLoadedFlipsAfterTheFirstReload() async throws {
+        let (store, _) = makeStore()
+        #expect(!store.hasLoaded)
+        await store.reloadDevices()
+        #expect(store.hasLoaded)
+    }
+
+    @Test func hasLoadedAlsoFlipsWhenTheFirstReloadFails() async throws {
+        provider.attach(device)
+        let service = FlakyService(base: LocalMTPService(provider: provider))
+        service.failDevices = true
+        let store = DeviceStore(service: service)
+        await store.reloadDevices()
+        #expect(store.hasLoaded)
+        #expect(store.devices.isEmpty)
+    }
+
     @Test func reloadLoadsDevicesAndStorages() async throws {
         let (store, _) = makeStore()
         await store.reloadDevices()

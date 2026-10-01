@@ -47,7 +47,7 @@ extension MTPError: LocalizedError {
         case .serviceInterrupted:
             String(localized: "The connection to the phone was interrupted.")
         case .phoneReconnected:
-            String(localized: "The phone was reconnected. Open the folder again and retry.")
+            String(localized: "The phone was reconnected. Upload the item again from its folder.")
         case .underlying(_, let message):
             message
         }

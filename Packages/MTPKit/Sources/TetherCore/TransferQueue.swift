@@ -131,6 +131,14 @@ public final class TransferQueue {
         return true
     }
 
+    /// Something else made progress on the device's serial worker (e.g. a Quick Look download), so a running
+    /// job queued behind it is waiting, not hung.
+    public func noteDeviceActivity(_ deviceID: DeviceID) {
+        for i in jobs.indices where jobs[i].state == .running && jobs[i].deviceID == deviceID {
+            jobs[i].lastActivity = .now
+        }
+    }
+
     public func startWatchdog(interval: Duration = .seconds(5)) {
         watchdog?.cancel()
         watchdog = Task { [weak self] in

@@ -19,6 +19,7 @@ public final class DeviceStore {
     /// Phones with a Release in flight; a second request for the same phone is ignored.
     public private(set) var releasing: Set<DeviceID> = []
     public private(set) var listings: [FolderRef: Listing] = [:]
+    public private(set) var hasLoaded = false
     public var listTimeout: Duration = .seconds(15)
 
     /// Reports whether a transfer is running on the device. A listing then queues behind it, so it must not
@@ -58,6 +59,7 @@ public final class DeviceStore {
     }
 
     public func reloadDevices() async {
+        defer { hasLoaded = true }
         // A transient failure must not wipe known devices, storages and cached listings.
         guard let list = try? await service.devices() else { return }
         apply(list)

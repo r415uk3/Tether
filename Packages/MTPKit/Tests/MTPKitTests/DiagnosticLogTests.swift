@@ -36,6 +36,30 @@ import Testing
         #expect(!text.contains("secret-name"))
     }
 
+    @Test func repeatedRescansOfALockedPhoneLogOneOpenFailure() async throws {
+        let provider = FakeDeviceProvider()
+        provider.attachUnavailable(AttachedDevice(id: "k", manufacturer: "Samsung", model: "S25"), error: .deviceLocked)
+        let service = LocalMTPService(provider: provider, log: DiagnosticLog())
+        _ = try await service.devices()
+        for _ in 1...4 { await service.rescan() }
+        let lines = try await service.diagnostics()
+        #expect(lines.filter { $0.contains("Open failed") }.count == 1)
+    }
+
+    @Test func releaseOutcomeIsLoggedWithoutNamesOrSerials() async throws {
+        let provider = FakeDeviceProvider()
+        provider.attachClaimed(FakeDevice(id: "serial-A"), as: "14-4")
+        let service = LocalMTPService(provider: provider, log: DiagnosticLog())
+        _ = try await service.devices()
+        try await service.releaseDevice("14-4")
+        let lines = try await service.diagnostics().filter { $0.contains("Release requested") }
+        #expect(lines.count == 1)
+        #expect(lines[0].contains("[device]"))
+        #expect(lines[0].contains("signalled=true"))
+        #expect(lines[0].contains("result=ok"))
+        #expect(!lines[0].contains("serial-A"))
+    }
+
     @Test func deviceInfoCarriesOSVersion() throws {
         let info = DeviceInfo(id: "x", manufacturer: "Google", model: "Pixel 9", state: .ready, osVersion: "15")
         let decoded = try JSONDecoder().decode(DeviceInfo.self, from: JSONEncoder().encode(info))

@@ -171,6 +171,35 @@ import MTPKit
         device.releaseHang()
     }
 
+    @Test func deviceActivityKeepsRunningJobsOnThatDeviceFromStalling() async throws {
+        let file = device.addFile("a.txt", data: Data("x".utf8))
+        let (queue, _) = try await makeQueue()
+        queue.stallTimeout = .milliseconds(200)
+        device.inject(.hang)
+        queue.enqueueDownload(file, deviceID: "p1", into: try makeTempDirectory())
+        try await Task.sleep(for: .milliseconds(300))
+        queue.noteDeviceActivity("other") // another phone's activity must not count
+        queue.noteDeviceActivity("p1") // e.g. a Quick Look download progressing on the shared worker
+        await queue.checkForStalls(now: .now)
+        #expect(provider.openCount("p1") == 1)
+        #expect(queue.jobs[0].state == .running)
+        device.releaseHang()
+        try await eventually { if case .finished = queue.jobs[0].state { true } else { false } }
+    }
+
+    @Test func jobsStallWithoutDeviceActivity() async throws {
+        let file = device.addFile("a.txt", data: Data("x".utf8))
+        let (queue, _) = try await makeQueue()
+        queue.stallTimeout = .milliseconds(200)
+        device.inject(.hang)
+        queue.enqueueDownload(file, deviceID: "p1", into: try makeTempDirectory())
+        try await Task.sleep(for: .milliseconds(300))
+        queue.noteDeviceActivity("other")
+        await queue.checkForStalls(now: .now)
+        #expect(provider.openCount("p1") == 2)
+        device.releaseHang()
+    }
+
     @Test func queuedJobSurvivesRestart() async throws {
         let a = device.addFile("a.txt", data: Data("x".utf8))
         let b = device.addFile("b.txt", data: Data("y".utf8))

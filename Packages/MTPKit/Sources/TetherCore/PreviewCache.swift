@@ -31,6 +31,11 @@ public final class PreviewCache {
         return true
     }
 
+    /// The device a running preview download occupies, or nil if `jobID` isn't a preview job.
+    public func deviceID(forPreviewJob jobID: UUID) -> DeviceID? {
+        inFlight.values.first { $0.jobID == jobID }?.deviceID
+    }
+
     private func refreshProgress() {
         progress = newestJob.flatMap { fractions[$0] }
     }
