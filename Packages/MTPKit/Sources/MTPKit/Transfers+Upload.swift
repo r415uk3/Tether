@@ -1,11 +1,12 @@
 import Foundation
 
 extension Transfers {
-    /// Uploads a file or folder into `parentID`. Checks space and name conflicts before sending anything.
+    /// Uploads a file or folder into `parentID`. Checks space and name clashes before sending anything;
+    /// `conflict` decides what a clash means (see `ConflictResolution`).
     public static func upload(_ source: URL, to device: any MTPDevice, storageID: UInt32, parentID: UInt32,
-                              progress: ProgressHandler) throws -> FileEntry {
-        let items = try LocalItem.scan(source)
-        let total = items.reduce(UInt64(0)) { $0 + $1.size }
+                              conflict: ConflictResolution = .fail, progress: ProgressHandler) throws -> FileEntry {
+        let scanned = try LocalItem.scan(source)
+        let total = scanned.reduce(UInt64(0)) { $0 + $1.size }
 
         guard let storage = try device.storages().first(where: { $0.id == storageID }) else { throw MTPError.notFound }
         guard storage.freeSpace >= total else {
@@ -13,7 +14,9 @@ extension Transfers {
         }
         let name = source.lastPathComponent
         let existing = try device.listFolder(storageID: storageID, folderID: parentID)
-        guard !existing.contains(where: { $0.name == name }) else { throw MTPError.nameConflict(name) }
+        let clashing = existing.filter { $0.name == name }
+        let uploadName = try destinationName(for: name, clashing: clashing, existing: existing, conflict: conflict)
+        let items = uploadName == name ? scanned : scanned.map { $0.renamingRoot(to: uploadName) }
 
         var createdRoot: FileEntry?
         var folderIDs: [[String]: UInt32] = [[]: parentID]
@@ -43,12 +46,51 @@ extension Transfers {
             if let createdRoot {
                 try? device.delete(objectID: createdRoot.objectID)
             } else {
-                removeIncomplete(named: name, in: parentID, storageID: storageID,
+                removeIncomplete(named: uploadName, in: parentID, storageID: storageID,
                                  keeping: Set(existing.map(\.objectID)), on: device)
             }
             throw MTPError.from(error)
         }
+
+        if conflict == .replace, !clashing.isEmpty {
+            return try swapIn(createdRoot!, replacing: clashing, finalName: name, on: device)
+        }
         return createdRoot!
+    }
+
+    /// The name the new item is uploaded under, given the folder's current contents.
+    private static func destinationName(for name: String, clashing: [FileEntry], existing: [FileEntry],
+                                        conflict: ConflictResolution) throws -> String {
+        guard !clashing.isEmpty else { return name }
+        let taken = Set(existing.map(\.name))
+        switch conflict {
+        case .fail: throw MTPError.nameConflict(name)
+        case .keepBoth: return uniqueName(for: name) { taken.contains($0) }
+        case .replace: return uniqueName(for: name + ".tether-upload") { taken.contains($0) }
+        }
+    }
+
+    /// Final step of a Replace: the new item is complete under a temporary name.
+    /// Delete the old item(s), then give the new one the original name.
+    private static func swapIn(_ uploaded: FileEntry, replacing old: [FileEntry], finalName: String,
+                               on device: any MTPDevice) throws -> FileEntry {
+        do {
+            for entry in old { try device.delete(objectID: entry.objectID) }
+        } catch {
+            // The original is (at least partly) still there: drop the new copy instead of leaving both.
+            try? device.delete(objectID: uploaded.objectID)
+            throw MTPError.from(error)
+        }
+        do {
+            try device.rename(objectID: uploaded.objectID, to: finalName)
+        } catch {
+            let reason = MTPError.from(error).localizedDescription
+            throw MTPError.underlying(code: -4, message: String(
+                localized: "The new “\(finalName)” was copied as “\(uploaded.name)” but couldn’t be renamed. \(reason)"))
+        }
+        var renamed = uploaded
+        renamed.name = finalName
+        return renamed
     }
 
     /// Deletes objects named `name` that appeared during a failed upload. Best effort.
@@ -68,6 +110,11 @@ struct LocalItem {
     let url: URL
     let isDirectory: Bool
     let size: UInt64
+
+    /// The same item uploaded under a different top-level name (Keep Both / Replace's temporary name).
+    func renamingRoot(to name: String) -> LocalItem {
+        LocalItem(components: [name] + components.dropFirst(), url: url, isDirectory: isDirectory, size: size)
+    }
 
     /// Pre-order list (folders before their contents), hidden files skipped.
     static func scan(_ source: URL) throws -> [LocalItem] {
