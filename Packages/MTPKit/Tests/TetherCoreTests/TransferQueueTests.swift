@@ -42,6 +42,34 @@ import MTPKit
         #expect(queue.jobs.first { $0.id == other }?.canRetry == true)
     }
 
+    @Test func cancelledAndReconnectedDownloadsRetryRules() async throws {
+        let (queue, _) = try await makeQueue()
+        let file = device.addFile("c.txt", data: Data(repeating: 1, count: 1_000_000))
+        let id = queue.enqueueDownload(file, deviceID: "p1", into: try makeTempDirectory())
+        queue.cancel(id)
+        try await eventually { queue.jobs.first { $0.id == id }?.state == .cancelled }
+        #expect(queue.jobs.first { $0.id == id }?.canRetry == true)
+        // Plan-mandated: a download that failed with .phoneReconnected is not retryable either.
+        device.inject(.fail(.phoneReconnected))
+        let other = queue.enqueueDownload(device.addFile("d.txt", data: Data("d".utf8)), deviceID: "p1",
+                                          into: try makeTempDirectory())
+        try await eventually { queue.jobs.first { $0.id == other }?.state == .failed(.phoneReconnected) }
+        #expect(queue.jobs.first { $0.id == other }?.canRetry == false)
+    }
+
+    @Test func failedUploadMarkedStaleCannotBeRetried() async throws {
+        let (queue, _) = try await makeQueue()
+        let file = try makeTempDirectory().appendingPathComponent("a.txt")
+        try Data("a".utf8).write(to: file)
+        device.inject(.fail(.deviceBusy))
+        let id = queue.enqueueUpload(file, to: FolderRef(deviceID: "p1", storageID: 1))
+        try await eventually { queue.jobs.first { $0.id == id }?.state == .failed(.deviceBusy) }
+        #expect(queue.jobs.first { $0.id == id }?.canRetry == true)
+        var job = try #require(queue.jobs.first { $0.id == id })
+        job.isStale = true
+        #expect(job.canRetry == false)
+    }
+
     @Test func jobsForSameDeviceRunOneAtATime() async throws {
         let a = device.addFile("a.bin", data: Data(count: 100_000))
         let b = device.addFile("b.bin", data: Data(count: 100_000))

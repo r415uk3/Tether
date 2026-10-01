@@ -192,6 +192,40 @@ import MTPKit
         #expect(await store.release("14-9") == .claimedByOtherProcess)
     }
 
+    @Test func concurrentReleasesOfOnePhoneHitTheServiceOnce() async throws {
+        provider.attachClaimed(FakeDevice(id: "serial-A"), as: "14-4")
+        let (store, _) = makeStore()
+        await store.reloadDevices()
+        async let first = store.release("14-4")
+        async let second = store.release("14-4")
+        _ = await (first, second)
+        #expect(provider.releaseClaimsCalls == 1)
+        #expect(store.releasing.isEmpty)
+    }
+
+    @Test func failedReleaseIsRecordedAndClearedWhenStateChanges() async throws {
+        provider.attachClaimed(FakeDevice(id: "serial-A"), as: "14-4", releasable: false)
+        let (store, service) = makeStore()
+        await store.reloadDevices()
+        #expect(await store.release("14-4") == .claimedByOtherProcess)
+        #expect(store.releaseErrors["14-4"] == .claimedByOtherProcess)
+        provider.detach("14-4")
+        await service.rescan()
+        await store.reloadDevices()
+        #expect(store.releaseErrors.isEmpty)
+    }
+
+    @Test func storageErrorsAreDroppedWhenTheDeviceGoes() async throws {
+        let (store, service) = makeStore()
+        device.inject(.fail(.deviceBusy))
+        await store.reloadDevices()
+        try await eventually { store.storageErrors["p1"] == .deviceBusy }
+        provider.detach("p1")
+        await service.rescan()
+        await store.reloadDevices()
+        #expect(store.storageErrors.isEmpty)
+    }
+
     @Test func releaseSucceedsAndListsDeviceReady() async throws {
         provider.attachClaimed(FakeDevice(id: "serial-A"), as: "14-4")
         let (store, _) = makeStore()
