@@ -1,0 +1,89 @@
+import Foundation
+import Testing
+@testable import MTPKit
+
+/// Hosts an MTPService behind an in-process anonymous XPC listener.
+final class XPCTestHost: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
+    let listener = NSXPCListener.anonymous()
+    let service: any MTPService
+
+    init(service: any MTPService) {
+        self.service = service
+        super.init()
+        listener.delegate = self
+        listener.resume()
+    }
+
+    func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
+        MTPXPCEndpoint.accept(connection, service: service)
+        return true
+    }
+
+    func makeClient() -> XPCMTPService {
+        let endpoint = Unchecked(listener.endpoint)
+        return XPCMTPService { NSXPCConnection(listenerEndpoint: endpoint.value) }
+    }
+}
+
+@Suite struct XPCTests {
+    let provider = FakeDeviceProvider()
+    let device = FakeDevice(id: "p1")
+
+    private func makeClient() -> (XPCMTPService, XPCTestHost) {
+        provider.attach(device)
+        let host = XPCTestHost(service: LocalMTPService(provider: provider))
+        return (host.makeClient(), host)
+    }
+
+    @Test func listsDevicesAndFolders() async throws {
+        device.addFolder("DCIM")
+        let (client, host) = makeClient()
+        let devices = try await client.devices()
+        #expect(devices.map(\.id) == ["p1"])
+        #expect(try await client.storages(deviceID: "p1").first?.id == 1)
+        #expect(try await client.list(FolderRef(deviceID: "p1", storageID: 1)).map(\.name) == ["DCIM"])
+        withExtendedLifetime(host) {}
+    }
+
+    @Test func serverErrorsArriveTyped() async throws {
+        let (client, host) = makeClient()
+        await #expect(throws: MTPError.deviceDisconnected) { try await client.storages(deviceID: "nope") }
+        withExtendedLifetime(host) {}
+    }
+
+    @Test func downloadDeliversProgressEvents() async throws {
+        let file = device.addFile("a.bin", data: Data(count: 10_000))
+        let (client, host) = makeClient()
+        let events = Log<ServiceEvent>()
+        await client.setEventHandler { events.append($0) }
+        _ = try await client.devices()
+        let job = UUID()
+        let url = try await client.download(jobID: job, entry: file, deviceID: "p1", into: try makeTempDirectory())
+        #expect(try Data(contentsOf: url).count == 10_000)
+        try await eventually { events.items.contains(.progress(jobID: job, done: 10_000, total: 10_000)) }
+        withExtendedLifetime(host) {}
+    }
+
+    @Test func restartFailsPendingCallAndReconnects() async throws {
+        let (client, host) = makeClient()
+        let events = Log<ServiceEvent>()
+        await client.setEventHandler { events.append($0) }
+        _ = try await client.devices()
+        device.inject(.hang)
+        let pending = Task { try await client.list(FolderRef(deviceID: "p1", storageID: 1)) }
+        try await Task.sleep(for: .milliseconds(100))
+        await client.restart()
+        await #expect(throws: MTPError.serviceInterrupted) { try await pending.value }
+        try await eventually { events.items.contains(.interrupted) }
+        device.releaseHang()
+        #expect(try await client.devices().map(\.id) == ["p1"])
+        withExtendedLifetime(host) {}
+    }
+
+    @Test func requestsRoundTripThroughCodec() throws {
+        let request = XPCRequest.upload(jobID: UUID(), fileURL: URL(fileURLWithPath: "/tmp/a b.txt"),
+                                        folder: FolderRef(deviceID: "d", storageID: 2, folderID: 9))
+        let decoded = try XPCCodec.decode(XPCRequest.self, from: XPCCodec.encode(request))
+        #expect(decoded == request)
+    }
+}

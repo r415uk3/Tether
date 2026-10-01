@@ -1,0 +1,67 @@
+name: Tether
+options:
+  bundleIdPrefix: dev.tether
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  MTPKit:
+    path: Packages/MTPKit
+targets:
+  Tether:
+    type: application
+    platform: macOS
+    sources: [Tether]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.tether.Tether
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Tether
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+    dependencies:
+      - package: MTPKit
+        product: MTPKit
+      - package: MTPKit
+        product: TetherCore
+      - target: MTPHelper
+  MTPHelper:
+    type: xpc-service
+    platform: macOS
+    sources: [MTPHelper]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.tether.Tether.MTPHelper
+        PRODUCT_NAME: MTPHelper
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Vendor/CLibMTP
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/Vendor/build/lib
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
+    info:
+      path: MTPHelper/Info.plist
+      properties:
+        XPCService:
+          ServiceType: Application
+    dependencies:
+      - package: MTPKit
+        product: MTPKit
+      - framework: Vendor/build/lib/libmtp.9.dylib
+        embed: true
+        codeSign: true
+      - framework: Vendor/build/lib/libusb-1.0.0.dylib
+        embed: true
+        codeSign: true
+schemes:
+  Tether:
+    build:
+      targets:
+        Tether: all
