@@ -28,6 +28,7 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     private var disconnected = false
     private var closed = false
     private var listCalls = 0
+    private var downloadCount = 0
     private var thumbnails: [UInt32: Data] = [:]
     private var thumbnailCount = 0
     private var thumbnailFault: MTPError?
@@ -114,7 +115,11 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
         }
     }
 
+    /// How many times `download` has been called (test inspection).
+    public var downloadCalls: Int { lock.withLock { downloadCount } }
+
     public func download(objectID: UInt32, to fileURL: URL, progress: ProgressHandler) throws {
+        lock.withLock { downloadCount += 1 }
         let limit = try beginTransfer()
         guard let data = lock.withLock({ nodes[objectID]?.data }) else { throw MTPError.notFound }
         guard FileManager.default.createFile(atPath: fileURL.path, contents: nil) else {
