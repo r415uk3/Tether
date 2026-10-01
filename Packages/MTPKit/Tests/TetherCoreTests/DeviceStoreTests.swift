@@ -169,8 +169,8 @@ private final class FlakyService: MTPService, @unchecked Sendable {
     func download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, into directory: URL) async throws -> URL {
         try await base.download(jobID: jobID, entry: entry, deviceID: deviceID, into: directory)
     }
-    func upload(jobID: UUID, fileURL: URL, to folder: FolderRef) async throws -> FileEntry {
-        try await base.upload(jobID: jobID, fileURL: fileURL, to: folder)
+    func upload(jobID: UUID, fileURL: URL, to folder: FolderRef, conflict: ConflictResolution) async throws -> FileEntry {
+        try await base.upload(jobID: jobID, fileURL: fileURL, to: folder, conflict: conflict)
     }
     func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry {
         try await base.createFolder(named: name, in: folder)
