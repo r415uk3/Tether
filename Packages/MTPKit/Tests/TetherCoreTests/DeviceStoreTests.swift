@@ -180,6 +180,14 @@ import MTPKit
         await store.reloadDevices()
         #expect(await store.release("14-9") == .claimedByOtherProcess)
     }
+
+    @Test func releaseSucceedsAndListsDeviceReady() async throws {
+        provider.attachClaimed(FakeDevice(id: "serial-A"), as: "14-4")
+        let (store, _) = makeStore()
+        await store.reloadDevices()
+        #expect(await store.release("14-4") == nil)
+        #expect(store.devices.first { $0.id == "serial-A" }?.state == .ready)
+    }
 }
 
 private final class FlakyService: MTPService, @unchecked Sendable {

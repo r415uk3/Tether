@@ -28,7 +28,22 @@ import Testing
         provider.attachUnavailable(AttachedDevice(id: "14-9", manufacturer: "S", model: "S25"), error: .deviceLocked)
         let service = LocalMTPService(provider: provider) // FakeDeviceProvider releases nothing here
         _ = try await service.devices()
-        await #expect(throws: MTPError.claimedByOtherProcess) { try await service.releaseDevice("14-9") }
+        await #expect(throws: MTPError.deviceLocked) { try await service.releaseDevice("14-9") }
+        #expect(provider.releaseClaimsCalls == 0)
+    }
+
+    @Test func releasingAReadyDeviceSignalsNothing() async throws {
+        provider.attach(FakeDevice(id: "serial-R"))
+        let service = LocalMTPService(provider: provider)
+        _ = try await service.devices()
+        try await service.releaseDevice("serial-R")
+        #expect(provider.releaseClaimsCalls == 0)
+    }
+
+    @Test func releasingAnUnknownDeviceIsDisconnected() async throws {
+        let service = LocalMTPService(provider: provider)
+        await #expect(throws: MTPError.deviceDisconnected) { try await service.releaseDevice("nope") }
+        #expect(provider.releaseClaimsCalls == 0)
     }
 
     @Test func agentLookupDoesNotCrashAndFindsNoFakeProcess() {

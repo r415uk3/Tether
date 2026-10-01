@@ -32,13 +32,17 @@ public final class DeviceStore {
     }
 
     /// Asks the service to free a phone held by Image Capture; returns the error if it stays held.
+    /// Reloads the device list either way. After a successful release the device's ID changes from its
+    /// transport key to its serial identity, so callers must not keep using the old ID.
     public func release(_ id: DeviceID) async -> MTPError? {
+        var failure: MTPError?
         do {
             try await service.releaseDevice(id)
-            return nil
         } catch {
-            return MTPError.from(error)
+            failure = MTPError.from(error)
         }
+        await reloadDevices()
+        return failure
     }
 
     public func reloadDevices() async {
