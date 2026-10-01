@@ -123,13 +123,19 @@ import MTPKit
         await service.setEventHandler { event in
             guard case .progress(let id, _, _) = event else { return }
             Task { @MainActor in
-                if cache.updateProgress(jobID: id, done: 1, total: 4) { seen.fractions.append(cache.progress) }
+                let device = cache.deviceID(forPreviewJob: id)
+                if cache.updateProgress(jobID: id, done: 1, total: 4) {
+                    seen.fractions.append(cache.progress)
+                    seen.devices.append(device)
+                }
             }
         }
         #expect(cache.progress == nil)
         #expect(cache.updateProgress(jobID: UUID(), done: 1, total: 2) == false) // unknown job
         let download = Task { try await cache.file(for: file, deviceID: "p1") }
         try await eventually { !seen.fractions.isEmpty }
+        #expect(seen.devices.first == "p1") // the preview's device is known, so the queue's watchdog can be told
+        #expect(cache.deviceID(forPreviewJob: UUID()) == nil)
         #expect(seen.fractions.first == 0.25) // the job was known to the cache and progress was published
         _ = try await download.value
         #expect(cache.progress == nil) // nothing running any more
@@ -137,4 +143,4 @@ import MTPKit
 }
 
 @MainActor
-private final class ProgressLog { var fractions: [Double?] = [] }
+private final class ProgressLog { var fractions: [Double?] = []; var devices: [DeviceID?] = [] }

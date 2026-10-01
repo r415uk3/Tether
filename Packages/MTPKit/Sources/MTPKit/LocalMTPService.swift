@@ -94,9 +94,11 @@ public actor LocalMTPService: MTPService {
                            category: "device")
             case .failure(let error):
                 guard current else { continue }
+                // Rescans repeat every few seconds while a phone is locked; log only when the state changes.
+                let changed = infos[device.id]?.state != .unavailable(error)
                 infos[device.id] = DeviceInfo(id: device.id, manufacturer: device.manufacturer,
                                               model: device.model, state: .unavailable(error))
-                log.record("Open failed for \(device.model): \(error.logDescription)", category: "device")
+                if changed { log.record("Open failed for \(device.model): \(error.logDescription)", category: "device") }
             }
         }
         hasScanned = true
@@ -116,6 +118,18 @@ public actor LocalMTPService: MTPService {
     }
 
     public func releaseDevice(_ deviceID: DeviceID) async throws {
+        var signalled = false
+        do {
+            try await attemptRelease(deviceID, signalled: &signalled)
+            log.record("Release requested: signalled=\(signalled), result=ok", category: "device")
+        } catch {
+            log.record("Release requested: signalled=\(signalled), result=\(MTPError.from(error).logDescription)",
+                       category: "device")
+            throw error
+        }
+    }
+
+    private func attemptRelease(_ deviceID: DeviceID, signalled: inout Bool) async throws {
         await ensureScanned()
         // Only a phone that is actually held by Image Capture may cause a process to be signalled.
         switch infos[key(for: deviceID)]?.state {
@@ -126,6 +140,7 @@ public actor LocalMTPService: MTPService {
         }
         let provider = self.provider
         let released = await Task.detached { provider.releaseClaims() }.value
+        signalled = released
         guard released else { throw MTPError.claimedByOtherProcess }
         try? await Task.sleep(for: .milliseconds(500)) // give the agent a moment to let go of the interface
         await rescan()
@@ -136,7 +151,8 @@ public actor LocalMTPService: MTPService {
         }
     }
 
-    public func diagnostics() async throws -> [String] {
+    /// Reads only the Sendable log, so a wedged service actor can't block Copy Diagnostics.
+    public nonisolated func diagnostics() async throws -> [String] {
         log.snapshot()
     }
 

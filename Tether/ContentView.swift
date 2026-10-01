@@ -21,6 +21,8 @@ struct ContentView: View {
             } else if let device = model.devices.devices.first(where: { $0.state == .ready })
                         ?? model.devices.devices.first {
                 DeviceStateView(device: device)
+            } else if !model.devices.hasLoaded {
+                ProgressView() // avoid flashing the no-phone guide before the first device load finishes
             } else {
                 NoPhoneView()
             }

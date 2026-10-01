@@ -25,6 +25,16 @@ import MTPKit
         try await eventually { model.transfers.jobs[0].fraction == 1 }
     }
 
+    @Test func diagnosticsReportGivesUpOnAWedgedHelper() async throws {
+        provider.attach(device)
+        let model = try makeModel(HangingDiagnosticsService(base: LocalMTPService(provider: provider)))
+        model.diagnosticsTimeout = .milliseconds(100)
+        let started = ContinuousClock.now
+        let report = await model.diagnosticsReport(appVersion: "1.0")
+        #expect(ContinuousClock.now - started < .seconds(5))
+        #expect(report.contains("Helper log unavailable"))
+    }
+
     @Test func deviceEventsUpdateStore() async throws {
         provider.attach(device)
         let service = LocalMTPService(provider: provider)
@@ -148,4 +158,36 @@ import MTPKit
         _ = try await preview.value
         #expect(model.previews.progress == nil)
     }
+}
+
+/// Forwards everything to a real service except `diagnostics()`, which never returns (a wedged helper).
+private final class HangingDiagnosticsService: MTPService, @unchecked Sendable {
+    let base: LocalMTPService
+    init(base: LocalMTPService) { self.base = base }
+    func setEventHandler(_ handler: @escaping @Sendable (ServiceEvent) -> Void) async { await base.setEventHandler(handler) }
+    func devices() async throws -> [DeviceInfo] { try await base.devices() }
+    func storages(deviceID: DeviceID) async throws -> [StorageInfo] { try await base.storages(deviceID: deviceID) }
+    func releaseDevice(_ deviceID: DeviceID) async throws { try await base.releaseDevice(deviceID) }
+    func diagnostics() async throws -> [String] {
+        while true { try await Task.sleep(for: .seconds(3600)) }
+    }
+    func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
+        try await base.thumbnail(objectID: objectID, in: folder)
+    }
+    func list(_ folder: FolderRef) async throws -> [FileEntry] { try await base.list(folder) }
+    func download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, into directory: URL) async throws -> URL {
+        try await base.download(jobID: jobID, entry: entry, deviceID: deviceID, into: directory)
+    }
+    func upload(jobID: UUID, fileURL: URL, to folder: FolderRef, conflict: ConflictResolution) async throws -> FileEntry {
+        try await base.upload(jobID: jobID, fileURL: fileURL, to: folder, conflict: conflict)
+    }
+    func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry {
+        try await base.createFolder(named: name, in: folder)
+    }
+    func rename(_ entry: FileEntry, in folder: FolderRef, to newName: String) async throws {
+        try await base.rename(entry, in: folder, to: newName)
+    }
+    func delete(_ entry: FileEntry, in folder: FolderRef) async throws { try await base.delete(entry, in: folder) }
+    func cancel(jobID: UUID) async { await base.cancel(jobID: jobID) }
+    func restart() async { await base.restart() }
 }
