@@ -17,13 +17,17 @@ public final class DeviceStore {
     public var listTimeout: Duration = .seconds(15)
 
     @ObservationIgnored private let service: any MTPService
+    /// Bumped at the start of every refresh; only the latest refresh of a folder may write its result.
+    @ObservationIgnored private var generations: [FolderRef: Int] = [:]
 
     public init(service: any MTPService) {
         self.service = service
     }
 
     public func reloadDevices() async {
-        apply((try? await service.devices()) ?? [])
+        // A transient failure must not wipe known devices, storages and cached listings.
+        guard let list = try? await service.devices() else { return }
+        apply(list)
     }
 
     public func apply(_ newDevices: [DeviceInfo]) {
@@ -47,6 +51,10 @@ public final class DeviceStore {
     }
 
     public func refresh(_ folder: FolderRef) async {
+        guard isKnown(folder.deviceID) else { listings[folder] = nil; return }
+        let generation = (generations[folder] ?? 0) + 1
+        generations[folder] = generation
+
         var listing = listings[folder] ?? Listing(entries: [], isUpdating: true, error: nil)
         listing.isUpdating = true
         listings[folder] = listing
@@ -61,7 +69,9 @@ public final class DeviceStore {
             result = .failure(MTPError.from(error))
         }
 
-        guard isReady(folder.deviceID) || result.isTimeout else { listings[folder] = nil; return }
+        guard generations[folder] == generation else { return }
+        let deviceAvailable = result.isTimeout ? isKnown(folder.deviceID) : isReady(folder.deviceID)
+        guard deviceAvailable else { listings[folder] = nil; return }
         switch result {
         case .success(let entries):
             listings[folder] = Listing(entries: entries, isUpdating: false, error: nil)
@@ -90,6 +100,10 @@ public final class DeviceStore {
             throw error
         }
         await refresh(folder)
+    }
+
+    private func isKnown(_ id: DeviceID) -> Bool {
+        devices.contains { $0.id == id }
     }
 
     private func isReady(_ id: DeviceID) -> Bool {
