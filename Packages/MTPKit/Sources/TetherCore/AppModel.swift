@@ -13,6 +13,9 @@ public final class AppModel {
         self.service = service
         devices = DeviceStore(service: service)
         transfers = TransferQueue(service: service)
+        devices.isDeviceBusy = { [weak transfers] id in
+            transfers?.jobs.contains { $0.deviceID == id && $0.state == .running } ?? false
+        }
         transfers.onJobFinished = { [weak store = devices] job in
             guard case .upload(_, let folder) = job.kind, let store else { return }
             Task {

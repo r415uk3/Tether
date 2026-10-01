@@ -62,6 +62,8 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
             }
         }
         if rc != 0 { throw lastError(h) }
+        // libmtp creates the file as 0740 (owner-executable, unreadable by others); normalise. Non-fatal.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: fileURL.path)
     }
 
     func upload(from fileURL: URL, name: String, size: UInt64, storageID: UInt32, parentID: UInt32,

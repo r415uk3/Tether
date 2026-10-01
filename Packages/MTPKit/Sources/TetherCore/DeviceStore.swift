@@ -16,6 +16,10 @@ public final class DeviceStore {
     public private(set) var listings: [FolderRef: Listing] = [:]
     public var listTimeout: Duration = .seconds(15)
 
+    /// Reports whether a transfer is running on the device. A listing then queues behind it, so it must not
+    /// be timed out (which would restart the service and kill the transfer); the transfer watchdog covers hangs.
+    @ObservationIgnored public var isDeviceBusy: (@MainActor (DeviceID) -> Bool)?
+
     @ObservationIgnored private let service: any MTPService
     /// Bumped at the start of every refresh; only the latest refresh of a folder may write its result.
     @ObservationIgnored private var generations: [FolderRef: Int] = [:]
@@ -62,9 +66,13 @@ public final class DeviceStore {
         let service = self.service
         let result: Result<[FileEntry], MTPError>
         do {
-            result = .success(try await withTimeout(listTimeout, onTimeout: { await service.restart() }) {
-                try await service.list(folder)
-            })
+            if isDeviceBusy?(folder.deviceID) == true {
+                result = .success(try await service.list(folder))
+            } else {
+                result = .success(try await withTimeout(listTimeout, onTimeout: { await service.restart() }) {
+                    try await service.list(folder)
+                })
+            }
         } catch {
             result = .failure(MTPError.from(error))
         }
