@@ -13,13 +13,17 @@ public struct DeviceInfo: Codable, Hashable, Sendable, Identifiable {
     public var model: String
     public var state: DeviceState
     public var session: UUID?
+    /// Android release (the MTP device version, e.g. "15"); nil when unknown or from an older payload.
+    public var osVersion: String?
 
-    public init(id: DeviceID, manufacturer: String, model: String, state: DeviceState, session: UUID? = nil) {
+    public init(id: DeviceID, manufacturer: String, model: String, state: DeviceState, session: UUID? = nil,
+                osVersion: String? = nil) {
         self.id = id
         self.manufacturer = manufacturer
         self.model = model
         self.state = state
         self.session = session
+        self.osVersion = osVersion
     }
 
     public var displayName: String { model.isEmpty ? manufacturer : model }

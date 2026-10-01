@@ -217,6 +217,7 @@ private final class FlakyService: MTPService, @unchecked Sendable {
     }
     func storages(deviceID: DeviceID) async throws -> [StorageInfo] { try await base.storages(deviceID: deviceID) }
     func releaseDevice(_ deviceID: DeviceID) async throws { try await base.releaseDevice(deviceID) }
+    func diagnostics() async throws -> [String] { try await base.diagnostics() }
     func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
         try await base.thumbnail(objectID: objectID, in: folder)
     }

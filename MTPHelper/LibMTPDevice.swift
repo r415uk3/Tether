@@ -12,8 +12,9 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         let manufacturer = Self.take(LIBMTP_Get_Manufacturername(handle)) ?? attached.manufacturer
         let model = Self.take(LIBMTP_Get_Modelname(handle)) ?? attached.model
         let serial = Self.take(LIBMTP_Get_Serialnumber(handle))
+        let version = Self.take(LIBMTP_Get_Deviceversion(handle))
         info = DeviceInfo(id: serial.map { "serial-\($0)" } ?? attached.id,
-                          manufacturer: manufacturer, model: model, state: .ready)
+                          manufacturer: manufacturer, model: model, state: .ready, osVersion: version)
     }
 
     func storages() throws -> [StorageInfo] {

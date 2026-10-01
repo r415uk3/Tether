@@ -10,13 +10,16 @@ public final class AppModel {
     public let thumbnails: ThumbnailStore
     public let previews: PreviewCache
     @ObservationIgnored private let service: any MTPService
+    @ObservationIgnored private let log: DiagnosticLog
 
     public init(service: any MTPService,
                 thumbnailDirectory: URL? = ThumbnailStore.defaultDirectory,
-                previewDirectory: URL = PreviewCache.defaultDirectory) {
+                previewDirectory: URL = PreviewCache.defaultDirectory,
+                log: DiagnosticLog = .shared) {
         self.service = service
-        devices = DeviceStore(service: service)
-        transfers = TransferQueue(service: service)
+        self.log = log
+        devices = DeviceStore(service: service, log: log)
+        transfers = TransferQueue(service: service, log: log)
         thumbnails = ThumbnailStore(service: service, directory: thumbnailDirectory)
         previews = PreviewCache(service: service, directory: previewDirectory)
         // Previews download on the same serial device worker as transfers, so they also make it busy.
@@ -53,5 +56,16 @@ public final class AppModel {
         case .interrupted:
             Task { await devices.reloadDevices() }
         }
+    }
+
+    public func diagnosticsReport(appVersion: String) async -> String {
+        let helperLog = try? await service.diagnostics()
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        return DiagnosticsReport.make(
+            appVersion: appVersion,
+            macOSVersion: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
+            devices: devices.devices,
+            appLog: log.snapshot(),
+            helperLog: helperLog)
     }
 }

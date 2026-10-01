@@ -119,5 +119,14 @@ final class XPCTestHost: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
         #expect(try await client.devices().contains { $0.id == "serial-B" && $0.state == .ready })
         withExtendedLifetime(host) {}
     }
-}
 
+    @Test func diagnosticsCrossXPC() async throws {
+        let log = DiagnosticLog()
+        log.record("hello", category: "test")
+        let service = LocalMTPService(provider: provider, log: log)
+        let host = XPCTestHost(service: service)
+        let lines = try await host.makeClient().diagnostics()
+        #expect(lines.count == 1 && lines[0].hasSuffix("[test] hello"))
+        withExtendedLifetime(host) {}
+    }
+}

@@ -19,9 +19,11 @@ public actor LocalMTPService: MTPService {
     private var hasScanned = false
     private var eventHandler: (@Sendable (ServiceEvent) -> Void)?
     private let cancellations = CancellationRegistry()
+    private let log: DiagnosticLog
 
-    public init(provider: any DeviceProvider) {
+    public init(provider: any DeviceProvider, log: DiagnosticLog = .shared) {
         self.provider = provider
+        self.log = log
     }
 
     public var hasUnavailableDevices: Bool {
@@ -57,6 +59,7 @@ public actor LocalMTPService: MTPService {
 
         for id in Set(infos.keys).union(opening.keys) where !lastAttached.contains(id) {
             generations[id, default: 0] += 1
+            log.record("Device removed", category: "device")
             workers.removeValue(forKey: id)?.shutdown(reason: .deviceDisconnected)
             infos[id] = nil
             publicIDs[id] = nil
@@ -86,11 +89,14 @@ public actor LocalMTPService: MTPService {
                 workers[device.id] = DeviceWorker(device: opened, name: device.model)
                 infos[device.id] = DeviceInfo(id: publicID, manufacturer: opened.info.manufacturer,
                                               model: opened.info.model, state: opened.info.state,
-                                              session: UUID())
+                                              session: UUID(), osVersion: opened.info.osVersion)
+                log.record("Opened \(opened.info.manufacturer) \(opened.info.model) (Android \(opened.info.osVersion ?? "?"))",
+                           category: "device")
             case .failure(let error):
                 guard current else { continue }
                 infos[device.id] = DeviceInfo(id: device.id, manufacturer: device.manufacturer,
                                               model: device.model, state: .unavailable(error))
+                log.record("Open failed for \(device.model): \(error.logDescription)", category: "device")
             }
         }
         hasScanned = true
@@ -98,6 +104,7 @@ public actor LocalMTPService: MTPService {
     }
 
     public func restart() async {
+        log.record("Service restarted", category: "service")
         for worker in workers.values { worker.shutdown(reason: .serviceInterrupted) }
         workers.removeAll()
         infos.removeAll()
@@ -127,6 +134,10 @@ public actor LocalMTPService: MTPService {
         case .unavailable(.claimedByOtherProcess)?: throw MTPError.claimedByOtherProcess
         default: break
         }
+    }
+
+    public func diagnostics() async throws -> [String] {
+        log.snapshot()
     }
 
     public func storages(deviceID: DeviceID) async throws -> [StorageInfo] {
