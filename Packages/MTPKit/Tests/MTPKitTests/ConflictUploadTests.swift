@@ -75,5 +75,57 @@ import Testing
                                          conflict: .replace) { _, _ in true }
         #expect(device.children(of: root).map(\.name) == ["Album"])
         #expect(device.children(of: album.objectID).map(\.name) == ["new.jpg"])
+        #expect(album.objectID != oldAlbum.objectID)
+        #expect(!device.children(of: root).contains { $0.objectID == oldAlbum.objectID })
+        #expect(device.children(of: oldAlbum.objectID).isEmpty)
+    }
+
+    private func message(of error: any Error) -> String { MTPError.from(error).localizedDescription }
+
+    @Test func failedDeleteOfOriginalKeepsBothCopies() throws {
+        let device = FakeDevice()
+        let original = device.addFile("photo.jpg", data: Data("old".utf8))
+        device.failNext(.delete, with: .deviceBusy)
+        let url = try makeFile("photo.jpg", "new")
+        var thrown: (any Error)?
+        do { _ = try Transfers.upload(url, to: device, storageID: 1, parentID: root, conflict: .replace) { _, _ in true } }
+        catch { thrown = error }
+        #expect(thrown != nil)
+        #expect(message(of: thrown!).contains("photo.jpg.tether-upload"))
+        #expect(device.data(of: original.objectID) == Data("old".utf8))
+        let copy = device.children(of: root).first { $0.name == "photo.jpg.tether-upload" }
+        #expect(copy != nil)
+        #expect(device.data(of: copy!.objectID) == Data("new".utf8))
+    }
+
+    @Test func failedRenameKeepsNewCopyUnderTemporaryName() throws {
+        let device = FakeDevice()
+        device.addFile("photo.jpg", data: Data("old".utf8))
+        device.failNext(.rename, with: .deviceBusy)
+        let url = try makeFile("photo.jpg", "new")
+        var thrown: (any Error)?
+        do { _ = try Transfers.upload(url, to: device, storageID: 1, parentID: root, conflict: .replace) { _, _ in true } }
+        catch { thrown = error }
+        #expect(thrown != nil)
+        #expect(message(of: thrown!).contains("photo.jpg.tether-upload"))
+        let children = device.children(of: root)
+        #expect(children.map(\.name) == ["photo.jpg.tether-upload"])
+        #expect(device.data(of: children[0].objectID) == Data("new".utf8))
+    }
+
+    @Test func failureOnSecondOriginalNeverDeletesNewCopy() throws {
+        let device = FakeDevice()
+        device.addFile("photo.jpg", data: Data("old1".utf8))
+        let second = device.addFile("photo.jpg", data: Data("old2".utf8))
+        device.failNext(.delete, after: 1, with: .deviceBusy)
+        let url = try makeFile("photo.jpg", "new")
+        #expect(throws: (any Error).self) {
+            try Transfers.upload(url, to: device, storageID: 1, parentID: root, conflict: .replace) { _, _ in true }
+        }
+        let names = device.children(of: root).map(\.name).sorted()
+        #expect(names == ["photo.jpg", "photo.jpg.tether-upload"])
+        #expect(device.children(of: root).contains { $0.objectID == second.objectID })
+        let copy = device.children(of: root).first { $0.name == "photo.jpg.tether-upload" }!
+        #expect(device.data(of: copy.objectID) == Data("new".utf8))
     }
 }
