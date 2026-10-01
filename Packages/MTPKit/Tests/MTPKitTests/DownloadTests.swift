@@ -177,11 +177,50 @@ import Testing
         let folder = device.addFolder("Big")
         device.addFile("x.bin", data: Data(count: 20_000), in: folder.objectID)
         device.addFile("y.bin", data: Data(count: 20_000), in: folder.objectID)
-        device.inject(.disconnectAfter(bytes: 25_000))
         let dir = try makeTempDirectory()
+        let progress = Log<UInt64>()
+        // The fault is injected once the first file is moving, so it hits a file transfer (not the folder
+        // listing) after the partial tree already exists on disk.
         #expect(throws: MTPError.deviceDisconnected) {
-            try Transfers.download(folder, from: device, into: dir) { _, _ in true }
+            try Transfers.download(folder, from: device, into: dir) { done, _ in
+                if progress.items.isEmpty { device.inject(.disconnectAfter(bytes: 1)) }
+                progress.append(done)
+                return true
+            }
         }
+        #expect(!progress.items.isEmpty)
+        #expect(try contents(of: dir).isEmpty)
+    }
+
+    @Test func staleParentIDFailsWithoutListing() throws {
+        let camera = device.addFolder("Camera")
+        let file = device.addFile("a.jpg", data: Data(count: 10))
+        var stale = file
+        stale.parentID = camera.objectID
+        try expectRejectedWithoutSideEffects(stale)
+    }
+
+    @Test func staleSizeFailsWithoutListing() throws {
+        let file = device.addFile("a.jpg", data: Data(count: 10))
+        var stale = file
+        stale.size = 11
+        try expectRejectedWithoutSideEffects(stale)
+    }
+
+    @Test func staleIsFolderFailsWithoutListing() throws {
+        let file = device.addFile("a.jpg", data: Data(count: 10))
+        var stale = file
+        stale.isFolder = true
+        try expectRejectedWithoutSideEffects(stale)
+    }
+
+    private func expectRejectedWithoutSideEffects(_ stale: FileEntry) throws {
+        let dir = try makeTempDirectory()
+        let before = device.listFolderCalls
+        #expect(throws: MTPError.notFound) {
+            try Transfers.download(stale, from: device, into: dir) { _, _ in true }
+        }
+        #expect(device.listFolderCalls == before)
         #expect(try contents(of: dir).isEmpty)
     }
 

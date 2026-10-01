@@ -64,11 +64,13 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         let h = try requireHandle()
         LIBMTP_Clear_Errorstack(h)
         guard let f = LIBMTP_Get_Filemetadata(h, objectID) else {
-            // A vanished handle is "no such object"; a dead connection must still surface as such.
-            if LIBMTP_Get_Errorstack(h) != nil, case .deviceDisconnected = lastError(h) {
-                throw MTPError.deviceDisconnected
+            // libmtp 1.1.23 returns NULL for a vanished handle and for a dead connection alike, and this call
+            // does not populate the errorstack. Probe the connection to tell them apart.
+            if LIBMTP_Get_Storage(h, 0) != 0 {
+                let error = lastError(h)
+                if case .underlying(let code, _) = error, code == -1 { throw MTPError.deviceDisconnected }
+                throw error
             }
-            LIBMTP_Clear_Errorstack(h)
             return nil
         }
         defer { LIBMTP_destroy_file_t(f) }
