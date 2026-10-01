@@ -49,11 +49,11 @@ public final class MTPXPCEndpoint: NSObject, MTPXPCProtocol, @unchecked Sendable
             return .entry(try await service.upload(jobID: jobID, fileURL: fileURL, to: folder, conflict: conflict))
         case .createFolder(let name, let folder):
             return .entry(try await service.createFolder(named: name, in: folder))
-        case .rename(let objectID, let deviceID, let newName):
-            try await service.rename(objectID: objectID, deviceID: deviceID, to: newName)
+        case .rename(let entry, let folder, let newName):
+            try await service.rename(entry, in: folder, to: newName)
             return .ok
-        case .delete(let objectID, let deviceID):
-            try await service.delete(objectID: objectID, deviceID: deviceID)
+        case .delete(let entry, let folder):
+            try await service.delete(entry, in: folder)
             return .ok
         case .cancel(let jobID):
             await service.cancel(jobID: jobID)

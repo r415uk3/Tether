@@ -54,12 +54,12 @@ public final class XPCMTPService: MTPService, @unchecked Sendable {
         return entry
     }
 
-    public func rename(objectID: UInt32, deviceID: DeviceID, to newName: String) async throws {
-        _ = try await send(.rename(objectID: objectID, deviceID: deviceID, newName: newName))
+    public func rename(_ entry: FileEntry, in folder: FolderRef, to newName: String) async throws {
+        _ = try await send(.rename(entry: entry, folder: folder, newName: newName))
     }
 
-    public func delete(objectID: UInt32, deviceID: DeviceID) async throws {
-        _ = try await send(.delete(objectID: objectID, deviceID: deviceID))
+    public func delete(_ entry: FileEntry, in folder: FolderRef) async throws {
+        _ = try await send(.delete(entry: entry, folder: folder))
     }
 
     public func cancel(jobID: UUID) async {

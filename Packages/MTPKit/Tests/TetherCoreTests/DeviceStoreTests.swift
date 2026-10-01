@@ -46,6 +46,21 @@ import MTPKit
         #expect(store.listings[folder]?.isUpdating == false)
     }
 
+    @Test func sessionChangeDropsListingsAndCountsAsReconnect() async throws {
+        let (store, _) = makeStore()
+        await store.reloadDevices()
+        await store.refresh(folder)
+        #expect(store.listings[folder] != nil)
+        var reconnected: [DeviceID] = []
+        store.onDeviceBecameReady = { reconnected.append($0) }
+        var info = try #require(store.devices.first)
+        info.session = UUID()
+        store.apply([info])
+        #expect(store.listings.isEmpty)
+        #expect(reconnected == ["p1"])
+        #expect(store.session(for: "p1") == info.session)
+    }
+
     @Test func removedDeviceDropsListings() async throws {
         let (store, _) = makeStore()
         await store.reloadDevices()
@@ -175,10 +190,10 @@ private final class FlakyService: MTPService, @unchecked Sendable {
     func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry {
         try await base.createFolder(named: name, in: folder)
     }
-    func rename(objectID: UInt32, deviceID: DeviceID, to newName: String) async throws {
-        try await base.rename(objectID: objectID, deviceID: deviceID, to: newName)
+    func rename(_ entry: FileEntry, in folder: FolderRef, to newName: String) async throws {
+        try await base.rename(entry, in: folder, to: newName)
     }
-    func delete(objectID: UInt32, deviceID: DeviceID) async throws { try await base.delete(objectID: objectID, deviceID: deviceID) }
+    func delete(_ entry: FileEntry, in folder: FolderRef) async throws { try await base.delete(entry, in: folder) }
     func cancel(jobID: UUID) async { await base.cancel(jobID: jobID) }
     func restart() async { await base.restart() }
 }

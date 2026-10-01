@@ -11,6 +11,7 @@ public enum MTPError: Error, Codable, Hashable, Sendable {
     case timeout
     case cancelled
     case serviceInterrupted
+    case phoneReconnected
     case underlying(code: Int, message: String)
 
     public static let unexpectedResponse = MTPError.underlying(code: -2, message: "Unexpected response from MTPHelper.")
@@ -45,6 +46,8 @@ extension MTPError: LocalizedError {
             String(localized: "The transfer was cancelled.")
         case .serviceInterrupted:
             String(localized: "The connection to the phone was interrupted.")
+        case .phoneReconnected:
+            String(localized: "The phone was reconnected. Open the folder again and retry.")
         case .underlying(_, let message):
             message
         }
