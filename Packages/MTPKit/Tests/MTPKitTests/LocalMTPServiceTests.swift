@@ -61,6 +61,23 @@ import Testing
         #expect(provider.openCount("p1") == 1)
     }
 
+    @Test func explicitRescanDuringFirstScanDoesNotLetNewCallersFail() async throws {
+        provider.attach(device)
+        device.addFile("a.txt", data: Data("x".utf8))
+        provider.holdOpens("p1")
+        let service = LocalMTPService(provider: provider)
+        let provider = self.provider
+        let folder = FolderRef(deviceID: "p1", storageID: 1)
+        let first = Task { try await service.list(folder) }
+        try await eventually { provider.openCount("p1") == 1 }
+        await service.rescan() // skips the device that is still opening, then marks the service scanned
+        let second = Task { try await service.list(folder) }
+        try await Task.sleep(for: .milliseconds(50))
+        provider.releaseOpens("p1")
+        #expect(try await first.value.map(\.name) == ["a.txt"])
+        #expect(try await second.value.map(\.name) == ["a.txt"])
+    }
+
     @Test func listsFolders() async throws {
         provider.attach(device)
         device.addFolder("DCIM")

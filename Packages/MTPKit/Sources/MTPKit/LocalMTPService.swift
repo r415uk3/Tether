@@ -40,11 +40,12 @@ public actor LocalMTPService: MTPService {
 
     /// Joins the shared first scan; concurrent first callers all await the same task.
     private func ensureScanned() async {
+        // Join an in-flight first scan even if an explicit rescan already set `hasScanned`.
+        if let firstScan { await firstScan.value; return }
         guard !hasScanned else { return }
-        if firstScan == nil {
-            firstScan = Task { await self.performScan() }
-        }
-        await firstScan?.value
+        let scan = Task { await self.performScan() }
+        firstScan = scan
+        await scan.value
     }
 
     private func performScan() async {
