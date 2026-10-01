@@ -46,8 +46,7 @@ private struct USBNotificationMock: View {
         }
         .padding(14)
         .frame(width: 260, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(.background.secondary))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(.separator))
+        .tetherCard()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Example: in the phone’s USB notification, File transfer is selected.")
     }
