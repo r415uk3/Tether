@@ -137,4 +137,15 @@ import MTPKit
         model.transfers.retry(id)
         try await eventually { if case .finished = model.transfers.jobs[0].state { true } else { false } }
     }
+
+    @Test func previewProgressEventsReachThePreviewCache() async throws {
+        provider.attach(device)
+        let file = device.addFile("big.bin", data: Data(count: 100_000))
+        let model = try makeModel(LocalMTPService(provider: provider))
+        await model.start()
+        let preview = Task { try await model.previews.file(for: file, deviceID: "p1") }
+        try await eventually { (model.previews.progress ?? 0) > 0 }
+        _ = try await preview.value
+        #expect(model.previews.progress == nil)
+    }
 }
