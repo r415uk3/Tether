@@ -4,9 +4,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DD="$PWD/DerivedData/strings"
-xcodegen generate >/dev/null
-xcodebuild -project Tether.xcodeproj -scheme Tether -configuration Debug -derivedDataPath "$DD" \
-    SWIFT_EMIT_LOC_STRINGS=YES ONLY_ACTIVE_ARCH=YES build >/dev/null
+mkdir -p "$DD"
+LOG="$DD/build.log"
+{ xcodegen generate &&
+  xcodebuild -project Tether.xcodeproj -scheme Tether -configuration Debug -derivedDataPath "$DD" \
+      SWIFT_EMIT_LOC_STRINGS=YES ONLY_ACTIVE_ARCH=YES build; } >"$LOG" 2>&1 \
+    || { echo "build failed; last 30 lines of $LOG:" >&2; tail -30 "$LOG" >&2; exit 1; }
 
 sync() { # sync <catalog> <path fragment of the target's build dir>
     local catalog="$1" fragment="$2" args=()
@@ -14,7 +17,11 @@ sync() { # sync <catalog> <path fragment of the target's build dir>
         find "$DD/Build/Intermediates.noindex" -name '*.stringsdata' -path "*$fragment/Objects-normal/*" \
             ! -name 'Extracted*' | sort)
     [ ${#args[@]} -gt 0 ] || { echo "no stringsdata for $fragment" >&2; exit 1; }
-    xcrun xcstringstool sync "$catalog" "${args[@]}" 2>&1 | grep -v "skip staleness checking" || true
+    local out
+    out=$(xcrun xcstringstool sync "$catalog" "${args[@]}" 2>&1) || { echo "$out" >&2; echo "sync failed for $catalog" >&2; exit 1; }
+    # xcstringstool only warns (exit 0) when it can't read the catalog; treat that as a failure too.
+    if grep -q "Skipping sync" <<<"$out"; then echo "$out" >&2; echo "sync failed for $catalog" >&2; exit 1; fi
+    grep -v "skip staleness checking" <<<"$out" | grep . || true
     echo "synced $catalog"
 }
 
