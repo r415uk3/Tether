@@ -180,8 +180,13 @@ public actor LocalMTPService: MTPService {
         return try worker(id)
     }
 
+    /// Public device identity -> transport key (the identity itself when it has no mapping).
+    private func key(for id: DeviceID) -> DeviceID {
+        publicIDs.first { $0.value == id }?.key ?? id
+    }
+
     private func worker(_ id: DeviceID) throws -> DeviceWorker {
-        let key = publicIDs.first { $0.value == id }?.key ?? id
+        let key = key(for: id)
         if let worker = workers[key] { return worker }
         if case .unavailable(let error)? = infos[key]?.state { throw error }
         throw MTPError.deviceDisconnected
@@ -190,8 +195,7 @@ public actor LocalMTPService: MTPService {
     /// Refuses a folder from an earlier connection: Android renumbers objects on reconnect.
     private func checkSession(_ folder: FolderRef) throws {
         guard let expected = folder.session else { return }
-        let key = publicIDs.first { $0.value == folder.deviceID }?.key ?? folder.deviceID
-        guard infos[key]?.session == expected else { throw MTPError.phoneReconnected }
+        guard infos[key(for: folder.deviceID)]?.session == expected else { throw MTPError.phoneReconnected }
     }
 
     private func sortedDevices() -> [DeviceInfo] {

@@ -6,6 +6,8 @@ struct BrowserView: View {
     @Environment(AppModel.self) private var model
     let selection: StorageSelection
     @State private var path: [FileEntry] = []
+    /// The connection session `path` was built in; its handles mean nothing in any other session.
+    @State private var pathSession: UUID?
     @State private var selectedIDs: Set<UInt32> = []
     @State private var renameRequest: UInt32?
     @State private var isEditingName = false
@@ -19,7 +21,8 @@ struct BrowserView: View {
 
     private var folder: FolderRef {
         FolderRef(deviceID: selection.deviceID, storageID: selection.storageID,
-                  folderID: path.last?.objectID ?? FileEntry.rootID, session: session)
+                  folderID: (pathSession == session ? path.last?.objectID : nil) ?? FileEntry.rootID,
+                  session: session)
     }
 
     private var title: String {
@@ -142,7 +145,10 @@ struct BrowserView: View {
     }
 
     private func open(_ entry: FileEntry) {
-        if entry.isFolder { path.append(entry) }
+        if entry.isFolder {
+            pathSession = session
+            path.append(entry)
+        }
     }
 
     private func newFolder() {

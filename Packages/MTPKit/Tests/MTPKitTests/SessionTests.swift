@@ -23,6 +23,12 @@ import Testing
         #expect(first != second)
     }
 
+    @Test func rescanWithoutUnplugKeepsTheSession() async throws {
+        let (service, first) = try await makeService()
+        await service.rescan()
+        #expect(try await service.devices().first?.session == first)
+    }
+
     @Test func staleSessionIsRefusedForFolderCalls() async throws {
         let (service, session) = try await makeService()
         device.addFolder("DCIM")

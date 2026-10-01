@@ -93,6 +93,12 @@ public final class DeviceStore {
         }
 
         guard generations[folder] == generation else { return }
+        // The phone reconnected while this ran: `apply` already dropped this folder's state.
+        if let folderSession = folder.session, folderSession != session(for: folder.deviceID) {
+            listings[folder] = nil
+            generations[folder] = nil
+            return
+        }
         let deviceAvailable = result.isTimeout ? isKnown(folder.deviceID) : isReady(folder.deviceID)
         guard deviceAvailable else { listings[folder] = nil; return }
         switch result {
