@@ -4,13 +4,23 @@ import TetherCore
 
 @main
 struct TetherApp: App {
-    @State private var model = AppModel(service: TetherApp.makeService())
+    /// `-CacheDirectory <path>` (UI tests) keeps thumbnails and previews out of the real Caches folder.
+    private static let cacheRoot: URL? = UserDefaults.standard.string(forKey: "CacheDirectory").map(URL.init(fileURLWithPath:))
+    private static var previewDirectory: URL {
+        cacheRoot?.appending(path: "Previews") ?? PreviewCache.defaultDirectory
+    }
+
+    @State private var model = AppModel(service: TetherApp.makeService(),
+                                        thumbnailDirectory: TetherApp.cacheRoot?.appending(path: "Thumbnails")
+                                            ?? ThumbnailStore.defaultDirectory,
+                                        previewDirectory: TetherApp.previewDirectory)
 
     init() {
-        PreviewCache.clear() // willTerminate doesn't fire after a crash or force-quit
+        let previews = Self.previewDirectory
+        PreviewCache.clear(directory: previews) // willTerminate doesn't fire after a crash or force-quit
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,
                                                object: nil, queue: .main) { _ in
-            PreviewCache.clear()
+            PreviewCache.clear(directory: previews)
         }
     }
 
