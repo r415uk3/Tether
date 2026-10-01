@@ -14,6 +14,8 @@ struct BrowserView: View {
     /// Folder and its entries as they were when the current rename began.
     @State private var renameContext: (folder: FolderRef, siblings: [FileEntry])?
     @State private var pendingDelete: [FileEntry] = []
+    /// Folder the pending delete was requested in (navigating before confirming must not retarget it).
+    @State private var pendingDeleteFolder: FolderRef?
     @State private var problem: String?
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
     @AppStorage(SettingsKey.viewMode) private var viewMode = BrowserViewMode.list
@@ -101,7 +103,8 @@ struct BrowserView: View {
             .focusedSceneValue(\.browserActions, menuActions)
             .confirmationDialog(deleteTitle, isPresented: isConfirmingDelete) {
                 let items = pendingDelete
-                Button(String(localized: "Delete"), role: .destructive) { delete(items) }
+                let deleteFolder = pendingDeleteFolder ?? folder
+                Button(String(localized: "Delete"), role: .destructive) { delete(items, in: deleteFolder) }
                 Button(String(localized: "Cancel"), role: .cancel) {}
             } message: {
                 Text("This can’t be undone.")
@@ -254,12 +257,15 @@ struct BrowserView: View {
     }
 
     private func requestDelete(_ entries: [FileEntry]) {
-        if !entries.isEmpty { pendingDelete = entries }
+        if !entries.isEmpty {
+            pendingDeleteFolder = folder
+            pendingDelete = entries
+        }
     }
 
-    private func delete(_ entries: [FileEntry]) {
+    private func delete(_ entries: [FileEntry], in folder: FolderRef) {
         pendingDelete = []
-        let folder = self.folder
+        pendingDeleteFolder = nil
         Task {
             do {
                 try await model.devices.delete(entries, in: folder)
@@ -312,7 +318,7 @@ struct BrowserView: View {
     }
 
     private var isConfirmingDelete: Binding<Bool> {
-        Binding(get: { !pendingDelete.isEmpty }, set: { if !$0 { pendingDelete = [] } })
+        Binding(get: { !pendingDelete.isEmpty }, set: { if !$0 { pendingDelete = []; pendingDeleteFolder = nil } })
     }
 
     private var isShowingProblem: Binding<Bool> {
