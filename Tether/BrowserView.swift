@@ -6,18 +6,27 @@ struct BrowserView: View {
     @Environment(AppModel.self) private var model
     let selection: StorageSelection
     @State private var path: [FileEntry] = []
+    /// The connection session `path` was built in; its handles mean nothing in any other session.
+    @State private var pathSession: UUID?
     @State private var selectedIDs: Set<UInt32> = []
     @State private var renameRequest: UInt32?
     @State private var isEditingName = false
     /// Folder and its entries as they were when the current rename began.
     @State private var renameContext: (folder: FolderRef, siblings: [FileEntry])?
     @State private var pendingDelete: [FileEntry] = []
+    /// Folder the pending delete was requested in (navigating before confirming must not retarget it).
+    @State private var pendingDeleteFolder: FolderRef?
     @State private var problem: String?
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
+    @AppStorage(SettingsKey.viewMode) private var viewMode = BrowserViewMode.list
+    @State private var renamingEntry: FileEntry?
+
+    private var session: UUID? { model.devices.session(for: selection.deviceID) }
 
     private var folder: FolderRef {
         FolderRef(deviceID: selection.deviceID, storageID: selection.storageID,
-                  folderID: path.last?.objectID ?? FileEntry.rootID)
+                  folderID: (pathSession == session ? path.last?.objectID : nil) ?? FileEntry.rootID,
+                  session: session)
     }
 
     private var title: String {
@@ -31,8 +40,21 @@ struct BrowserView: View {
 
     var body: some View {
         let listing = model.devices.listings[folder]
-        FileTableView(entries: visibleEntries, selection: $selectedIDs, renameRequest: renameRequest, folderKey: folder,
-                      actions: tableActions)
+        Group {
+            switch viewMode {
+            case .icons:
+                FileGridView(entries: visibleEntries, selection: $selectedIDs, folderKey: folder,
+                             thumbnailVersion: model.thumbnails.version,
+                             thumbnail: { entry in
+                                 model.thumbnails.cached(entry, deviceID: selection.deviceID).flatMap(NSImage.init(data:))
+                             },
+                             requestThumbnail: { model.thumbnails.request($0, in: folder) },
+                             actions: tableActions)
+            case .list:
+                FileTableView(entries: visibleEntries, selection: $selectedIDs, renameRequest: renameRequest,
+                              folderKey: folder, actions: tableActions)
+            }
+        }
             .overlay { overlay(for: listing) }
             .navigationTitle(title)
             .navigationSubtitle(listing?.isUpdating == true ? String(localized: "Updating…") : "")
@@ -42,10 +64,20 @@ struct BrowserView: View {
                         .disabled(path.isEmpty || isEditingName)
                 }
                 ToolbarItem {
+                    Picker("View", selection: $viewMode) {
+                        Label("Icons", systemImage: "square.grid.2x2").tag(BrowserViewMode.icons)
+                        Label("List", systemImage: "list.bullet").tag(BrowserViewMode.list)
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(isEditingName)
+                    .help("Show items as icons or as a list")
+                }
+                ToolbarItem {
                     Button(action: refresh) { Label("Refresh", systemImage: "arrow.clockwise") }
                 }
                 ToolbarItem {
                     Button(action: newFolder) { Label("New Folder", systemImage: "folder.badge.plus") }
+                        .disabled(isEditingName)
                 }
                 ToolbarItem {
                     Button(action: chooseFilesToUpload) { Label("Upload", systemImage: "square.and.arrow.up") }
@@ -53,13 +85,26 @@ struct BrowserView: View {
             }
             .task(id: folder) { await model.devices.refresh(folder) }
             .onChange(of: folder) {
+                QuickLookController.shared.invalidate()
                 selectedIDs = []
                 renameRequest = nil
+            }
+            .onChange(of: session) {
+                QuickLookController.shared.invalidate()
+                path = []
+            }
+            .onChange(of: selectedIDs) {
+                if QuickLookController.shared.isVisible { showQuickLook(selectedEntries) }
+            }
+            .onChange(of: viewMode) {
+                renameRequest = nil
+                isEditingName = false
             }
             .focusedSceneValue(\.browserActions, menuActions)
             .confirmationDialog(deleteTitle, isPresented: isConfirmingDelete) {
                 let items = pendingDelete
-                Button(String(localized: "Delete"), role: .destructive) { delete(items) }
+                let deleteFolder = pendingDeleteFolder ?? folder
+                Button(String(localized: "Delete"), role: .destructive) { delete(items, in: deleteFolder) }
                 Button(String(localized: "Cancel"), role: .cancel) {}
             } message: {
                 Text("This can’t be undone.")
@@ -69,6 +114,10 @@ struct BrowserView: View {
             } message: {
                 Text(problem ?? "")
             }
+            .sheet(item: $renamingEntry) { entry in
+                RenameSheet(entry: entry) { commitRename(entry, $0) }
+            }
+            .onChange(of: renamingEntry) { isEditingName = renamingEntry != nil }
     }
 
     // MARK: Overlay
@@ -99,7 +148,7 @@ struct BrowserView: View {
             open: open,
             dropFiles: { upload($0, window: $1) },
             makePromise: { FilePromise.provider(for: $0, deviceID: selection.deviceID, queue: model.transfers) },
-            requestRename: { renameRequest = $0.objectID },
+            requestRename: beginRename,
             commitRename: commitRename,
             renameStarted: { renameRequest = nil },
             editingChanged: { editing in
@@ -108,7 +157,8 @@ struct BrowserView: View {
             },
             download: download,
             delete: requestDelete,
-            newFolder: newFolder)
+            newFolder: newFolder,
+            quickLook: quickLook)
     }
 
     private var menuActions: BrowserActions {
@@ -120,11 +170,17 @@ struct BrowserView: View {
             selected.count == 1 && selected[0].isFolder && !editing ? { open(selected[0]) } : nil
         let downloadAction: (() -> Void)? = selected.isEmpty ? nil : { download(selected) }
         let renameAction: (() -> Void)? =
-            selected.count == 1 && !editing ? { renameRequest = selected[0].objectID } : nil
+            selected.count == 1 && !editing ? { beginRename(selected[0]) } : nil
         let deleteAction: (() -> Void)? = selected.isEmpty || editing ? nil : { requestDelete(selected) }
+        let quickLookAction: (() -> Void)? =
+            selected.contains { !$0.isFolder } && !editing ? { quickLook(selected) } : nil
+        let newFolderAction: (() -> Void)? = editing ? nil : { newFolder() }
+        let showIconsAction: (() -> Void)? = editing ? nil : { viewMode = .icons }
+        let showListAction: (() -> Void)? = editing ? nil : { viewMode = .list }
         return BrowserActions(
-            newFolder: newFolder, refresh: refresh, goUp: goUpAction, open: openAction,
-            download: downloadAction, rename: renameAction, delete: deleteAction)
+            newFolder: newFolderAction, refresh: refresh, goUp: goUpAction, open: openAction,
+            download: downloadAction, rename: renameAction, delete: deleteAction,
+            showIcons: showIconsAction, showList: showListAction, quickLook: quickLookAction)
     }
 
     // MARK: Actions
@@ -139,7 +195,24 @@ struct BrowserView: View {
     }
 
     private func open(_ entry: FileEntry) {
-        if entry.isFolder { path.append(entry) }
+        if entry.isFolder {
+            pathSession = session
+            path.append(entry)
+        } else {
+            showQuickLook([entry]) // double-click replaces the preview; it never closes the panel
+        }
+    }
+
+    private func quickLook(_ entries: [FileEntry]) {
+        QuickLookController.shared.toggle(entries, deviceID: selection.deviceID, cache: model.previews) { error in
+            problem = error.localizedDescription
+        }
+    }
+
+    private func showQuickLook(_ entries: [FileEntry]) {
+        QuickLookController.shared.show(entries, deviceID: selection.deviceID, cache: model.previews) { error in
+            problem = error.localizedDescription
+        }
     }
 
     private func newFolder() {
@@ -148,11 +221,22 @@ struct BrowserView: View {
         Task {
             do {
                 let created = try await model.devices.createFolder(named: name, in: folder)
+                guard self.folder == folder else { return }
                 selectedIDs = [created.objectID]
-                renameRequest = created.objectID
+                beginRename(created)
             } catch {
                 problem = MTPError.from(error).localizedDescription
             }
+        }
+    }
+
+    private func beginRename(_ entry: FileEntry) {
+        switch viewMode {
+        case .list:
+            renameRequest = entry.objectID
+        case .icons:
+            renameContext = (folder, allEntries)
+            renamingEntry = entry
         }
     }
 
@@ -173,12 +257,15 @@ struct BrowserView: View {
     }
 
     private func requestDelete(_ entries: [FileEntry]) {
-        if !entries.isEmpty { pendingDelete = entries }
+        if !entries.isEmpty {
+            pendingDeleteFolder = folder
+            pendingDelete = entries
+        }
     }
 
-    private func delete(_ entries: [FileEntry]) {
+    private func delete(_ entries: [FileEntry], in folder: FolderRef) {
         pendingDelete = []
-        let folder = self.folder
+        pendingDeleteFolder = nil
         Task {
             do {
                 try await model.devices.delete(entries, in: folder)
@@ -231,7 +318,7 @@ struct BrowserView: View {
     }
 
     private var isConfirmingDelete: Binding<Bool> {
-        Binding(get: { !pendingDelete.isEmpty }, set: { if !$0 { pendingDelete = [] } })
+        Binding(get: { !pendingDelete.isEmpty }, set: { if !$0 { pendingDelete = []; pendingDeleteFolder = nil } })
     }
 
     private var isShowingProblem: Binding<Bool> {

@@ -27,13 +27,17 @@ extension Transfers {
         }
     }
 
-    /// Checks that `entry` still describes the object on the phone. Android builds a new object database for
-    /// each USB connection, so after a replug an old handle can point at a different object (or none).
+    /// Refuses to act on a handle that no longer names this item (e.g. after Android renumbered objects on
+    /// reconnect). One GetObjectInfo, no folder listing.
     static func verify(_ entry: FileEntry, on device: any MTPDevice) throws {
-        let siblings = try device.listFolder(storageID: entry.storageID, folderID: entry.parentID)
-        let current = siblings.first { $0.objectID == entry.objectID }
-        guard let current, current.name == entry.name, current.isFolder == entry.isFolder,
-              entry.isFolder || current.size == entry.size else { throw MTPError.notFound }
+        guard let current = try device.objectInfo(objectID: entry.objectID),
+              current.name == entry.name,
+              current.isFolder == entry.isFolder,
+              current.parentID == entry.parentID,
+              current.storageID == entry.storageID,
+              entry.isFolder || current.size == entry.size else {
+            throw MTPError.notFound
+        }
     }
 
     /// Makes a phone-supplied name safe as a single macOS path component.

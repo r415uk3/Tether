@@ -6,6 +6,14 @@ import TetherCore
 struct TetherApp: App {
     @State private var model = AppModel(service: TetherApp.makeService())
 
+    init() {
+        PreviewCache.clear() // willTerminate doesn't fire after a crash or force-quit
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,
+                                               object: nil, queue: .main) { _ in
+            PreviewCache.clear()
+        }
+    }
+
     var body: some Scene {
         Window("Tether", id: "main") {
             ContentView()

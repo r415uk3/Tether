@@ -12,12 +12,14 @@ public struct DeviceInfo: Codable, Hashable, Sendable, Identifiable {
     public var manufacturer: String
     public var model: String
     public var state: DeviceState
+    public var session: UUID?
 
-    public init(id: DeviceID, manufacturer: String, model: String, state: DeviceState) {
+    public init(id: DeviceID, manufacturer: String, model: String, state: DeviceState, session: UUID? = nil) {
         self.id = id
         self.manufacturer = manufacturer
         self.model = model
         self.state = state
+        self.session = session
     }
 
     public var displayName: String { model.isEmpty ? manufacturer : model }
@@ -67,11 +69,14 @@ public struct FolderRef: Codable, Hashable, Sendable {
     public let deviceID: DeviceID
     public let storageID: UInt32
     public let folderID: UInt32
+    /// The connection session this folder was listed in; nil skips the check.
+    public let session: UUID?
 
-    public init(deviceID: DeviceID, storageID: UInt32, folderID: UInt32 = FileEntry.rootID) {
+    public init(deviceID: DeviceID, storageID: UInt32, folderID: UInt32 = FileEntry.rootID, session: UUID? = nil) {
         self.deviceID = deviceID
         self.storageID = storageID
         self.folderID = folderID
+        self.session = session
     }
 }
 
