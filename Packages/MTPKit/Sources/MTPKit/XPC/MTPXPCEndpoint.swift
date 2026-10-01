@@ -1,0 +1,63 @@
+import Foundation
+
+/// Helper-side adapter: decodes requests, calls the wrapped service, forwards events to the app.
+public final class MTPXPCEndpoint: NSObject, MTPXPCProtocol, @unchecked Sendable {
+    private let service: any MTPService
+
+    private init(service: any MTPService) {
+        self.service = service
+    }
+
+    /// Configures and resumes an accepted connection. Call from `listener(_:shouldAcceptNewConnection:)`.
+    public static func accept(_ connection: NSXPCConnection, service: any MTPService) {
+        connection.exportedInterface = NSXPCInterface(with: MTPXPCProtocol.self)
+        connection.exportedObject = MTPXPCEndpoint(service: service)
+        connection.remoteObjectInterface = NSXPCInterface(with: MTPXPCEventsProtocol.self)
+        let events = Unchecked(connection.remoteObjectProxy as? MTPXPCEventsProtocol)
+        connection.resume()
+        Task {
+            await service.setEventHandler { event in
+                events.value?.event(XPCCodec.encode(event))
+            }
+        }
+    }
+
+    public func call(_ request: Data, reply: @escaping @Sendable (Data) -> Void) {
+        let service = self.service
+        Task {
+            let response: XPCResponse
+            do {
+                response = try await Self.handle(XPCCodec.decode(XPCRequest.self, from: request), service: service)
+            } catch {
+                response = .failure(MTPError.from(error))
+            }
+            reply(XPCCodec.encode(response))
+        }
+    }
+
+    private static func handle(_ request: XPCRequest, service: any MTPService) async throws -> XPCResponse {
+        switch request {
+        case .devices:
+            return .devices(try await service.devices())
+        case .storages(let deviceID):
+            return .storages(try await service.storages(deviceID: deviceID))
+        case .list(let folder):
+            return .entries(try await service.list(folder))
+        case .download(let jobID, let entry, let deviceID, let directory):
+            return .url(try await service.download(jobID: jobID, entry: entry, deviceID: deviceID, into: directory))
+        case .upload(let jobID, let fileURL, let folder):
+            return .entry(try await service.upload(jobID: jobID, fileURL: fileURL, to: folder))
+        case .createFolder(let name, let folder):
+            return .entry(try await service.createFolder(named: name, in: folder))
+        case .rename(let objectID, let deviceID, let newName):
+            try await service.rename(objectID: objectID, deviceID: deviceID, to: newName)
+            return .ok
+        case .delete(let objectID, let deviceID):
+            try await service.delete(objectID: objectID, deviceID: deviceID)
+            return .ok
+        case .cancel(let jobID):
+            await service.cancel(jobID: jobID)
+            return .ok
+        }
+    }
+}
