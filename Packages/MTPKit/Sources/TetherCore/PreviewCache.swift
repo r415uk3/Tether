@@ -7,7 +7,12 @@ public final class PreviewCache {
     private let service: any MTPService
     private let directory: URL
     private var ready: [ItemKey: URL] = [:]
-    private var inFlight: [ItemKey: Task<URL, Error>] = [:]
+    private struct InFlight {
+        let task: Task<URL, Error>
+        let jobID: UUID
+        let token: UUID
+    }
+    private var inFlight: [ItemKey: InFlight] = [:]
 
     public init(service: any MTPService, directory: URL = PreviewCache.defaultDirectory) {
         self.service = service
@@ -22,24 +27,32 @@ public final class PreviewCache {
     public func file(for entry: FileEntry, deviceID: DeviceID) async throws -> URL {
         let key = ItemKey(entry: entry, deviceID: deviceID)
         if let url = ready[key], FileManager.default.fileExists(atPath: url.path) { return url }
-        if let task = inFlight[key] { return try await task.value }
+        if let running = inFlight[key] { return try await running.task.value }
 
         let folder = directory.appendingPathComponent(key.fileName, isDirectory: true)
         let service = self.service
+        let jobID = UUID()
+        let token = UUID()
         let task = Task { () throws -> URL in
             try? FileManager.default.removeItem(at: folder) // a leftover from an interrupted download
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            return try await service.download(jobID: UUID(), entry: entry, deviceID: deviceID, into: folder)
+            return try await service.download(jobID: jobID, entry: entry, deviceID: deviceID, into: folder)
         }
-        inFlight[key] = task
-        defer { inFlight[key] = nil }
+        inFlight[key] = InFlight(task: task, jobID: jobID, token: token)
+        defer { if inFlight[key]?.token == token { inFlight[key] = nil } } // clear() may have replaced it
         let url = try await task.value
-        ready[key] = url
+        if inFlight[key]?.token == token { ready[key] = url }
         return url
     }
 
     public func clear() {
         ready.removeAll()
+        let service = self.service
+        for running in inFlight.values {
+            let jobID = running.jobID
+            Task { await service.cancel(jobID: jobID) }
+        }
+        inFlight.removeAll()
         Self.clear(directory: directory)
     }
 
