@@ -39,7 +39,7 @@ struct BrowserView: View {
             .toolbar {
                 ToolbarItem(placement: .navigation) {
                     Button(action: goUp) { Label("Back", systemImage: "chevron.left") }
-                        .disabled(path.isEmpty)
+                        .disabled(path.isEmpty || isEditingName)
                 }
                 ToolbarItem {
                     Button(action: refresh) { Label("Refresh", systemImage: "arrow.clockwise") }
@@ -114,8 +114,10 @@ struct BrowserView: View {
     private var menuActions: BrowserActions {
         let selected = selectedEntries
         let editing = isEditingName
-        let goUpAction: (() -> Void)? = path.isEmpty ? nil : { goUp() }
-        let openAction: (() -> Void)? = selected.count == 1 && selected[0].isFolder ? { open(selected[0]) } : nil
+        // Navigating away mid-rename would discard the typed name.
+        let goUpAction: (() -> Void)? = path.isEmpty || editing ? nil : { goUp() }
+        let openAction: (() -> Void)? =
+            selected.count == 1 && selected[0].isFolder && !editing ? { open(selected[0]) } : nil
         let downloadAction: (() -> Void)? = selected.isEmpty ? nil : { download(selected) }
         let renameAction: (() -> Void)? =
             selected.count == 1 && !editing ? { renameRequest = selected[0].objectID } : nil
