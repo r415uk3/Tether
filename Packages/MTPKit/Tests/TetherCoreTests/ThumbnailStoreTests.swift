@@ -4,16 +4,23 @@ import MTPKit
 @testable import TetherCore
 
 @MainActor
+final class TestClock {
+    var date = Date(timeIntervalSince1970: 1_700_000_000)
+}
+
+@MainActor
 @Suite struct ThumbnailStoreTests {
     let provider = FakeDeviceProvider()
     let device = FakeDevice(id: "p1")
     var folder: FolderRef { FolderRef(deviceID: "p1", storageID: 1) }
 
+    let clock = TestClock()
+
     private func makeStore(directory: URL? = nil) async throws -> (ThumbnailStore, LocalMTPService) {
         provider.attach(device)
         let service = LocalMTPService(provider: provider)
         _ = try await service.devices()
-        return (ThumbnailStore(service: service, directory: directory), service)
+        return (ThumbnailStore(service: service, directory: directory, now: { [clock] in clock.date }), service)
     }
 
     @Test func fetchesOnceAndCachesInMemory() async throws {
@@ -32,39 +39,61 @@ import MTPKit
     @Test func diskCacheSurvivesANewStore() async throws {
         let photo = device.addFile("a.jpg", data: Data(count: 10))
         device.setThumbnail(Data("thumb".utf8), for: photo.objectID)
-        let dir = try makeTempDirectory()
+        let dir = try makeTempDirectory().appendingPathComponent("not-yet-created")
         let (first, service) = try await makeStore(directory: dir)
         first.request(photo, in: folder)
         try await eventually { first.cached(photo, deviceID: "p1") != nil }
-        let second = ThumbnailStore(service: service, directory: dir)
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent(ItemKey(entry: photo, deviceID: "p1").fileName).path))
+        let second = ThumbnailStore(service: service, directory: dir, now: { [clock] in clock.date })
         second.request(photo, in: folder)
         try await eventually { second.cached(photo, deviceID: "p1") != nil }
         #expect(device.thumbnailCalls == 1)
     }
 
-    @Test func missingThumbnailIsNotRefetched() async throws {
+    @Test func missingThumbnailIsNotRefetchedUntilItExpires() async throws {
         let photo = device.addFile("a.jpg", data: Data(count: 10)) // no thumbnail set
         let (store, _) = try await makeStore()
         store.request(photo, in: folder)
-        try await eventually { device.thumbnailCalls == 1 }
-        try await Task.sleep(for: .milliseconds(50))
+        try await eventually { device.thumbnailCalls == 1 && store.pendingCount == 0 }
+        clock.date.addTimeInterval(9 * 60)
         store.request(photo, in: folder)
-        try await Task.sleep(for: .milliseconds(50))
+        try await eventually { store.pendingCount == 0 }
         #expect(device.thumbnailCalls == 1)
         #expect(store.cached(photo, deviceID: "p1") == nil)
+        clock.date.addTimeInterval(2 * 60)
+        device.setThumbnail(Data("late".utf8), for: photo.objectID)
+        store.request(photo, in: folder)
+        try await eventually { store.cached(photo, deviceID: "p1") != nil }
+        #expect(device.thumbnailCalls == 2)
     }
 
-    @Test func transientFailureIsRetried() async throws {
+    @Test func transientFailureIsRetriedAfterBackoff() async throws {
         let photo = device.addFile("a.jpg", data: Data(count: 10))
         device.setThumbnail(Data("thumb".utf8), for: photo.objectID)
         device.failNextThumbnail(with: .deviceBusy)
         let (store, _) = try await makeStore()
         store.request(photo, in: folder)
-        try await eventually { device.thumbnailCalls == 1 }
-        try await Task.sleep(for: .milliseconds(50))
+        try await eventually { device.thumbnailCalls == 1 && store.pendingCount == 0 }
+        store.request(photo, in: folder) // inside the back-off window
+        try await eventually { store.pendingCount == 0 }
+        #expect(device.thumbnailCalls == 1)
+        clock.date.addTimeInterval(16)
         store.request(photo, in: folder)
         try await eventually { store.cached(photo, deviceID: "p1") != nil }
         #expect(device.thumbnailCalls == 2)
+    }
+
+    @Test func emptyCacheFileIsIgnored() async throws {
+        let photo = device.addFile("a.jpg", data: Data(count: 10))
+        device.setThumbnail(Data("thumb".utf8), for: photo.objectID)
+        let dir = try makeTempDirectory()
+        let file = dir.appendingPathComponent(ItemKey(entry: photo, deviceID: "p1").fileName)
+        try Data().write(to: file)
+        let (store, _) = try await makeStore(directory: dir)
+        store.request(photo, in: folder)
+        try await eventually { store.cached(photo, deviceID: "p1") != nil }
+        #expect(device.thumbnailCalls == 1)
+        #expect(try Data(contentsOf: file) == Data("thumb".utf8))
     }
 
     @Test func changedItemGetsNewThumbnail() async throws {

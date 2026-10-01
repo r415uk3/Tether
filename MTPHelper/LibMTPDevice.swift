@@ -143,10 +143,7 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         let rc = LIBMTP_Get_Thumbnail(h, objectID, &data, &size)
         defer { if let data { free(data) } }
         guard rc == 0, let data, size > 0 else {
-            if rc != 0, LIBMTP_Get_Errorstack(h) != nil, case .deviceDisconnected = lastError(h) {
-                throw MTPError.deviceDisconnected
-            }
-            LIBMTP_Clear_Errorstack(h)
+            if rc != 0, case .deviceDisconnected = lastError(h) { throw MTPError.deviceDisconnected }
             return nil // no thumbnail for this object
         }
         return Data(bytes: data, count: Int(size))

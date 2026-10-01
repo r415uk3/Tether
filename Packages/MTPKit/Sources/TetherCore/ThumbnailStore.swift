@@ -9,15 +9,25 @@ public final class ThumbnailStore {
     public private(set) var version = 0
 
     @ObservationIgnored private var memory: [ItemKey: Data] = [:]
-    @ObservationIgnored private var missing: Set<ItemKey> = []
+    /// Keys not to ask the phone about again until the date passes.
+    @ObservationIgnored private var retryAfter: [ItemKey: Date] = [:]
     @ObservationIgnored private var inFlight: Set<ItemKey> = []
     @ObservationIgnored private let service: any MTPService
     @ObservationIgnored private let directory: URL?
+    @ObservationIgnored private let now: @MainActor () -> Date
 
-    public init(service: any MTPService, directory: URL? = ThumbnailStore.defaultDirectory) {
+    private static let missingRetryInterval: TimeInterval = 10 * 60
+    private static let failureRetryInterval: TimeInterval = 15
+
+    public init(service: any MTPService, directory: URL? = ThumbnailStore.defaultDirectory,
+                now: @escaping @MainActor () -> Date = Date.init) {
         self.service = service
         self.directory = directory
+        self.now = now
     }
+
+    /// Number of thumbnails currently loading (test hook).
+    var pendingCount: Int { inFlight.count }
 
     public static var defaultDirectory: URL? {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
@@ -41,31 +51,48 @@ public final class ThumbnailStore {
     public func request(_ entry: FileEntry, in folder: FolderRef) {
         guard Self.wantsThumbnail(entry) else { return }
         let key = ItemKey(entry: entry, deviceID: folder.deviceID)
-        guard memory[key] == nil, !missing.contains(key), !inFlight.contains(key) else { return }
+        guard memory[key] == nil, !inFlight.contains(key) else { return }
+        if let date = retryAfter[key], now() < date { return }
         inFlight.insert(key)
         let file = directory?.appendingPathComponent(key.fileName)
         let service = self.service
         Task {
             defer { inFlight.remove(key) }
-            if let file, let data = try? Data(contentsOf: file) {
+            if let file, let data = await Self.readCached(file) {
                 store(data, for: key)
                 return
             }
             do {
                 guard let data = try await service.thumbnail(objectID: entry.objectID, in: folder) else {
-                    missing.insert(key) // the phone has none; don't ask again
+                    retryAfter[key] = now().addingTimeInterval(Self.missingRetryInterval)
                     return
                 }
-                if let file {
-                    try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
-                                                             withIntermediateDirectories: true)
-                    try? data.write(to: file, options: .atomic)
-                }
+                retryAfter[key] = nil
+                if let file { await Self.writeCached(data, to: file) }
                 store(data, for: key)
             } catch {
-                // Busy / disconnected: leave it unmarked so a later request retries.
+                // Busy / disconnected: back off briefly, then a later request retries.
+                retryAfter[key] = now().addingTimeInterval(Self.failureRetryInterval)
             }
         }
+    }
+
+    /// Reads a cache file off the main actor; an empty or unreadable file is removed and treated as a miss.
+    private nonisolated static func readCached(_ file: URL) async -> Data? {
+        await Task.detached {
+            guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+            if let data = try? Data(contentsOf: file), !data.isEmpty { return data }
+            try? FileManager.default.removeItem(at: file)
+            return nil
+        }.value
+    }
+
+    private nonisolated static func writeCached(_ data: Data, to file: URL) async {
+        await Task.detached {
+            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
+                                                     withIntermediateDirectories: true)
+            try? data.write(to: file, options: .atomic)
+        }.value
     }
 
     private func store(_ data: Data, for key: ItemKey) {
