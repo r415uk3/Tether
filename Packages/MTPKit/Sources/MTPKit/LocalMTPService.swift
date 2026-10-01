@@ -110,13 +110,23 @@ public actor LocalMTPService: MTPService {
 
     public func releaseDevice(_ deviceID: DeviceID) async throws {
         await ensureScanned()
+        // Only a phone that is actually held by Image Capture may cause a process to be signalled.
+        switch infos[key(for: deviceID)]?.state {
+        case nil: throw MTPError.deviceDisconnected
+        case .ready?: return
+        case .unavailable(let error)? where error != .claimedByOtherProcess: throw error
+        default: break
+        }
         let provider = self.provider
         let released = await Task.detached { provider.releaseClaims() }.value
         guard released else { throw MTPError.claimedByOtherProcess }
         try? await Task.sleep(for: .milliseconds(500)) // give the agent a moment to let go of the interface
         await rescan()
-        let transportKey = key(for: deviceID)
-        if case .unavailable(.claimedByOtherProcess)? = infos[transportKey]?.state { throw MTPError.claimedByOtherProcess }
+        switch infos[key(for: deviceID)]?.state {
+        case nil: throw MTPError.deviceDisconnected
+        case .unavailable(.claimedByOtherProcess)?: throw MTPError.claimedByOtherProcess
+        default: break
+        }
     }
 
     public func storages(deviceID: DeviceID) async throws -> [StorageInfo] {
