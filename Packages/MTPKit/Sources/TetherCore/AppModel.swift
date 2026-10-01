@@ -16,6 +16,7 @@ public final class AppModel {
         devices.isDeviceBusy = { [weak transfers] id in
             transfers?.jobs.contains { $0.deviceID == id && $0.state == .running } ?? false
         }
+        devices.onDeviceBecameReady = { [weak transfers] id in transfers?.deviceReconnected(id) }
         transfers.onJobFinished = { [weak store = devices] job in
             guard case .upload(_, let folder, _) = job.kind, let store else { return }
             Task {

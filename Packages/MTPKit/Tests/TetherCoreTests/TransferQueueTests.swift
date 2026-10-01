@@ -98,6 +98,24 @@ import MTPKit
         try await eventually { if case .finished = queue.jobs[0].state { true } else { false } }
     }
 
+    @Test func reconnectMarksOnlyThatDevicesUnfinishedUploadsStale() async throws {
+        let (queue, _) = try await makeQueue()
+        let dir = try makeTempDirectory()
+        let file = dir.appendingPathComponent("up.txt")
+        try Data("up".utf8).write(to: file)
+        let folder = FolderRef(deviceID: "p1", storageID: 1)
+        let done = queue.enqueueUpload(file, to: folder)
+        try await eventually { if case .finished = queue.jobs[0].state { true } else { false } }
+        device.inject(.fail(.deviceBusy))
+        let failed = queue.enqueueUpload(file, to: folder, conflict: .keepBoth)
+        try await eventually { queue.jobs[1].state == .failed(.deviceBusy) }
+        queue.deviceReconnected("other")
+        #expect(!queue.jobs[1].isStale)
+        queue.deviceReconnected("p1")
+        #expect(queue.jobs.first { $0.id == done }?.isStale == false)
+        #expect(queue.jobs.first { $0.id == failed }?.isStale == true)
+    }
+
     @Test func stalledJobTriggersRestart() async throws {
         let file = device.addFile("a.txt", data: Data("x".utf8))
         let (queue, _) = try await makeQueue()

@@ -60,4 +60,59 @@ import MTPKit
             if case .finished = model.transfers.jobs[0].state { true } else { false }
         }
     }
+
+    /// Replugs `phone` under a new USB key and waits until the model sees it ready again.
+    private func replug(_ phone: FakeDevice, from old: String, to new: String, service: LocalMTPService,
+                        model: AppModel) async throws {
+        provider.detach(old)
+        await service.rescan()
+        try await eventually { model.devices.devices.isEmpty }
+        provider.attach(phone, as: new)
+        await service.rescan()
+        try await eventually { model.devices.devices.map(\.state) == [.ready] }
+        try await eventually { model.devices.storages[phone.info.id] != nil }
+    }
+
+    @Test func uploadRetriedAfterReplugFailsWithoutTouchingDevice() async throws {
+        let phone = FakeDevice(id: "serial-ABC")
+        provider.attach(phone, as: "14-4")
+        let service = LocalMTPService(provider: provider)
+        let model = AppModel(service: service)
+        await model.start()
+        let folder = FolderRef(deviceID: "serial-ABC", storageID: 1)
+        let file = try makeTempDirectory().appendingPathComponent("up.txt")
+        try Data("up".utf8).write(to: file)
+        try await eventually { model.devices.storages["serial-ABC"] != nil } // so the fault hits the transfer
+        phone.inject(.fail(.deviceDisconnected))
+        let id = model.transfers.enqueueUpload(file, to: folder)
+        try await eventually { model.transfers.jobs[0].state == .failed(.deviceDisconnected) }
+        try await replug(phone, from: "14-4", to: "14-7", service: service, model: model)
+
+        model.transfers.retry(id)
+        let stale = MTPError.underlying(code: -6, message: String(
+            localized: "The phone was reconnected, so this folder may have changed. Upload the item again."))
+        try await eventually { model.transfers.jobs[0].state == .failed(stale) }
+        #expect(phone.children(of: FileEntry.rootID).isEmpty)
+
+        // A new upload after the replug works.
+        model.transfers.enqueueUpload(file, to: folder)
+        try await eventually { if case .finished = model.transfers.jobs[1].state { true } else { false } }
+        #expect(phone.children(of: FileEntry.rootID).map(\.name) == ["up.txt"])
+    }
+
+    @Test func downloadRetriedAfterReplugStillWorks() async throws {
+        let phone = FakeDevice(id: "serial-ABC")
+        provider.attach(phone, as: "14-4")
+        let entry = phone.addFile("a.txt", data: Data("x".utf8))
+        let service = LocalMTPService(provider: provider)
+        let model = AppModel(service: service)
+        await model.start()
+        try await eventually { model.devices.storages["serial-ABC"] != nil } // so the fault hits the transfer
+        phone.inject(.fail(.deviceDisconnected))
+        let id = model.transfers.enqueueDownload(entry, deviceID: "serial-ABC", into: try makeTempDirectory())
+        try await eventually { model.transfers.jobs[0].state == .failed(.deviceDisconnected) }
+        try await replug(phone, from: "14-4", to: "14-7", service: service, model: model)
+        model.transfers.retry(id)
+        try await eventually { if case .finished = model.transfers.jobs[0].state { true } else { false } }
+    }
 }

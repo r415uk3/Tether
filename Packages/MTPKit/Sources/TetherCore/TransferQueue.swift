@@ -23,6 +23,8 @@ public final class TransferQueue {
         /// Identifies one run of the job to the service; changes on retry.
         var attempt = UUID()
         var lastActivity = ContinuousClock.now
+        /// An upload that predates a reconnect of its device: its folder handle may now name another object.
+        var isStale = false
 
         public var name: String {
             switch kind {
@@ -96,6 +98,17 @@ public final class TransferQueue {
         }
     }
 
+    /// The device became ready again (e.g. after a replug). Android numbers objects afresh for every USB
+    /// connection, so uploads that were waiting or that ended earlier may target a different folder now;
+    /// they fail instead of running. Downloads re-check their entry on the device, so they are left alone.
+    public func deviceReconnected(_ id: DeviceID) {
+        for i in jobs.indices where jobs[i].deviceID == id {
+            guard case .upload = jobs[i].kind else { continue }
+            if case .finished = jobs[i].state { continue }
+            jobs[i].isStale = true // a running upload is still on the old connection and will fail
+        }
+    }
+
     public func updateProgress(attempt: UUID, done: UInt64, total: UInt64) {
         // No state check: the final event may arrive just after the job finished.
         guard let i = jobs.firstIndex(where: { $0.attempt == attempt }) else { return }
@@ -153,6 +166,7 @@ public final class TransferQueue {
     private func run(_ job: Job) async {
         let result: Result<URL?, MTPError>
         do {
+            if job.isStale { throw Self.staleUploadError }
             switch job.kind {
             case .download(let entry, let deviceID, let directory):
                 result = .success(try await service.download(jobID: job.attempt, entry: entry,
@@ -171,6 +185,11 @@ public final class TransferQueue {
         case .failure(let error): finish(i, .failed(error))
         }
         pump()
+    }
+
+    private static var staleUploadError: MTPError {
+        .underlying(code: -6, message: String(
+            localized: "The phone was reconnected, so this folder may have changed. Upload the item again."))
     }
 
     private func finish(_ i: Int, _ state: State) {

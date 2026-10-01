@@ -40,7 +40,8 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
             let next = f.pointee.next
             entries.append(FileEntry(
                 objectID: f.pointee.item_id,
-                parentID: f.pointee.parent_id,
+                // libmtp reports root items with parent 0; callers list the root as FileEntry.rootID.
+                parentID: f.pointee.parent_id == 0 ? FileEntry.rootID : f.pointee.parent_id,
                 storageID: f.pointee.storage_id,
                 name: f.pointee.filename.map { String(cString: $0) } ?? "",
                 size: f.pointee.filesize,
