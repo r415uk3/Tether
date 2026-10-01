@@ -37,6 +37,14 @@ import Testing
         #expect(!(await service.hasUnavailableDevices))
     }
 
+    @Test func firstCallWithoutPriorScanSucceeds() async throws {
+        provider.attach(device)
+        device.addFile("a.txt", data: Data("x".utf8))
+        let service = LocalMTPService(provider: provider)
+        let entries = try await service.list(FolderRef(deviceID: "p1", storageID: 1))
+        #expect(entries.map(\.name) == ["a.txt"])
+    }
+
     @Test func listsFolders() async throws {
         provider.attach(device)
         device.addFolder("DCIM")

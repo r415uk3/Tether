@@ -28,6 +28,7 @@ extension Transfers {
                 if item.isDirectory {
                     created = try device.createFolder(name: itemName, storageID: storageID, parentID: parent)
                     folderIDs[item.components] = created.objectID
+                    guard progress(sent, total) else { throw MTPError.cancelled }
                 } else {
                     let base = sent
                     created = try device.upload(from: item.url, name: itemName, size: item.size,

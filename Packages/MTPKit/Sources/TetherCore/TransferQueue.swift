@@ -50,6 +50,7 @@ public final class TransferQueue {
 
     @ObservationIgnored private let service: any MTPService
     @ObservationIgnored private var completions: [UUID: Completion] = [:]
+    @ObservationIgnored private var isRestarting = false
     @ObservationIgnored private var watchdog: Task<Void, Never>?
 
     public init(service: any MTPService) {
@@ -98,7 +99,7 @@ public final class TransferQueue {
     public func updateProgress(attempt: UUID, done: UInt64, total: UInt64) {
         // No state check: the final event may arrive just after the job finished.
         guard let i = jobs.firstIndex(where: { $0.attempt == attempt }) else { return }
-        jobs[i].done = done
+        jobs[i].done = max(jobs[i].done, done)
         jobs[i].total = total
         jobs[i].lastActivity = .now
     }
@@ -119,7 +120,10 @@ public final class TransferQueue {
         let stalled = jobs.contains { $0.state == .running && now - $0.lastActivity > stallTimeout }
         guard stalled else { return }
         for i in jobs.indices where jobs[i].state == .running { jobs[i].lastActivity = now }
+        isRestarting = true
         await service.restart()
+        isRestarting = false
+        pump()
     }
 
     // MARK: Internals
@@ -135,6 +139,7 @@ public final class TransferQueue {
     private func index(_ id: UUID) -> Int? { jobs.firstIndex { $0.id == id } }
 
     private func pump() {
+        guard !isRestarting else { return } // the device is reopening; queued jobs would fail as disconnected
         var busy = Set(jobs.filter { $0.state == .running }.map(\.deviceID))
         for i in jobs.indices where jobs[i].state == .queued && !busy.contains(jobs[i].deviceID) {
             busy.insert(jobs[i].deviceID)

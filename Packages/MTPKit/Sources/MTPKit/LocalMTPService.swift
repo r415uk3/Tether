@@ -82,33 +82,33 @@ public actor LocalMTPService: MTPService {
     }
 
     public func storages(deviceID: DeviceID) async throws -> [StorageInfo] {
-        try await worker(deviceID).perform(.interactive) { try $0.storages() }
+        try await worker(deviceID, scanning: true).perform(.interactive) { try $0.storages() }
     }
 
     public func list(_ folder: FolderRef) async throws -> [FileEntry] {
-        try await worker(folder.deviceID).perform(.interactive) {
+        try await worker(folder.deviceID, scanning: true).perform(.interactive) {
             try $0.listFolder(storageID: folder.storageID, folderID: folder.folderID)
         }
     }
 
     public func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry {
-        try await worker(folder.deviceID).perform(.interactive) {
+        try await worker(folder.deviceID, scanning: true).perform(.interactive) {
             try $0.createFolder(name: name, storageID: folder.storageID, parentID: folder.folderID)
         }
     }
 
     public func rename(objectID: UInt32, deviceID: DeviceID, to newName: String) async throws {
-        try await worker(deviceID).perform(.interactive) { try $0.rename(objectID: objectID, to: newName) }
+        try await worker(deviceID, scanning: true).perform(.interactive) { try $0.rename(objectID: objectID, to: newName) }
     }
 
     public func delete(objectID: UInt32, deviceID: DeviceID) async throws {
-        try await worker(deviceID).perform(.interactive) { try $0.delete(objectID: objectID) }
+        try await worker(deviceID, scanning: true).perform(.interactive) { try $0.delete(objectID: objectID) }
     }
 
     public func download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, into directory: URL) async throws -> URL {
         let reporter = ProgressReporter(jobID: jobID, registry: cancellations, handler: eventHandler)
         defer { cancellations.clear(jobID) }
-        return try await worker(deviceID).perform(.transfer) { device in
+        return try await worker(deviceID, scanning: true).perform(.transfer) { device in
             try reporter.checkCancelled()
             return try Transfers.download(entry, from: device, into: directory) { reporter.report(done: $0, total: $1) }
         }
@@ -117,7 +117,7 @@ public actor LocalMTPService: MTPService {
     public func upload(jobID: UUID, fileURL: URL, to folder: FolderRef) async throws -> FileEntry {
         let reporter = ProgressReporter(jobID: jobID, registry: cancellations, handler: eventHandler)
         defer { cancellations.clear(jobID) }
-        return try await worker(folder.deviceID).perform(.transfer) { device in
+        return try await worker(folder.deviceID, scanning: true).perform(.transfer) { device in
             try reporter.checkCancelled()
             return try Transfers.upload(fileURL, to: device, storageID: folder.storageID, parentID: folder.folderID) {
                 reporter.report(done: $0, total: $1)
@@ -127,6 +127,12 @@ public actor LocalMTPService: MTPService {
 
     public func cancel(jobID: UUID) {
         cancellations.cancel(jobID)
+    }
+
+    /// With `scanning`, a service that has never scanned (e.g. a freshly relaunched helper) scans first.
+    private func worker(_ id: DeviceID, scanning: Bool) async throws -> DeviceWorker {
+        if scanning && !hasScanned { await rescan() }
+        return try worker(id)
     }
 
     private func worker(_ id: DeviceID) throws -> DeviceWorker {
