@@ -9,6 +9,8 @@ struct BrowserView: View {
     @State private var selectedIDs: Set<UInt32> = []
     @State private var renameRequest: UInt32?
     @State private var isEditingName = false
+    /// Folder and its entries as they were when the current rename began.
+    @State private var renameContext: (folder: FolderRef, siblings: [FileEntry])?
     @State private var pendingDelete: [FileEntry] = []
     @State private var problem: String?
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
@@ -29,7 +31,7 @@ struct BrowserView: View {
 
     var body: some View {
         let listing = model.devices.listings[folder]
-        FileTableView(entries: visibleEntries, selection: $selectedIDs, renameRequest: renameRequest,
+        FileTableView(entries: visibleEntries, selection: $selectedIDs, renameRequest: renameRequest, folderKey: folder,
                       actions: tableActions)
             .overlay { overlay(for: listing) }
             .navigationTitle(title)
@@ -95,12 +97,15 @@ struct BrowserView: View {
     private var tableActions: FileTableActions {
         FileTableActions(
             open: open,
-            dropFiles: upload,
+            dropFiles: { upload($0, window: $1) },
             makePromise: { FilePromise.provider(for: $0, deviceID: selection.deviceID, queue: model.transfers) },
             requestRename: { renameRequest = $0.objectID },
             commitRename: commitRename,
             renameStarted: { renameRequest = nil },
-            editingChanged: { isEditingName = $0 },
+            editingChanged: { editing in
+                isEditingName = editing
+                if editing { renameContext = (folder, allEntries) }
+            },
             download: download,
             delete: requestDelete,
             newFolder: newFolder)
@@ -136,13 +141,14 @@ struct BrowserView: View {
     }
 
     private func commitRename(_ entry: FileEntry, _ proposed: String) {
-        switch NameValidation.validate(proposed, current: entry.name, siblings: allEntries) {
+        let context = renameContext ?? (folder, allEntries)
+        switch NameValidation.validate(proposed, current: entry.name, siblings: context.siblings) {
         case .unchanged:
             return
         case .invalid(let reason):
             problem = reason.message
         case .valid(let name):
-            let folder = self.folder
+            let folder = context.folder
             Task {
                 do { try await model.devices.rename(entry, in: folder, to: name) }
                 catch { problem = MTPError.from(error).localizedDescription }
@@ -174,13 +180,13 @@ struct BrowserView: View {
         }
     }
 
-    private func upload(_ urls: [URL]) {
+    private func upload(_ urls: [URL], window: NSWindow?) {
         let folder = self.folder
         let names = Set(allEntries.map(\.name)) // hidden names clash too
         let defaultChoice = AppSettings.conflictDefault().choice
         Task {
             let planned = await UploadPlanner.plan(urls, existingNames: names, defaultChoice: defaultChoice,
-                                                   ask: ConflictPrompt.ask)
+                                                   ask: { await ConflictPrompt.ask($0, in: window) })
             for item in planned {
                 model.transfers.enqueueUpload(item.url, to: folder, conflict: item.conflict)
             }
@@ -188,6 +194,7 @@ struct BrowserView: View {
     }
 
     private func chooseFilesToUpload() {
+        let window = NSApp.mainWindow
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
@@ -195,7 +202,7 @@ struct BrowserView: View {
         panel.prompt = String(localized: "Upload")
         panel.begin { response in
             guard response == .OK else { return }
-            upload(panel.urls)
+            upload(panel.urls, window: window)
         }
     }
 

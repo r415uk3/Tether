@@ -4,7 +4,7 @@ import TetherCore
 /// Finder-style "an item with this name already exists" alert, shown as a sheet on the key window.
 @MainActor
 enum ConflictPrompt {
-    static func ask(_ question: ConflictQuestion) async -> ConflictAnswer {
+    static func ask(_ question: ConflictQuestion, in window: NSWindow? = nil) async -> ConflictAnswer {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = String(localized: "An item named “\(question.name)” already exists in this folder.")
@@ -19,7 +19,7 @@ enum ConflictPrompt {
         }
 
         let response: NSApplication.ModalResponse
-        if let window = NSApp.keyWindow {
+        if let window = window ?? NSApp.mainWindow ?? NSApp.keyWindow {
             response = await alert.beginSheetModal(for: window)
         } else {
             response = alert.runModal()

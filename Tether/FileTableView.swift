@@ -6,7 +6,7 @@ import MTPKit
 /// What the file list asks its owner to do. All closures run on the main actor.
 struct FileTableActions {
     var open: (FileEntry) -> Void
-    var dropFiles: ([URL]) -> Void
+    var dropFiles: ([URL], NSWindow?) -> Void
     var makePromise: (FileEntry) -> NSFilePromiseProvider
     var requestRename: (FileEntry) -> Void
     var commitRename: (FileEntry, String) -> Void
@@ -25,6 +25,8 @@ struct FileTableView: NSViewRepresentable {
     @Binding var selection: Set<UInt32>
     /// Object whose name should be edited as soon as its row exists.
     var renameRequest: UInt32?
+    /// Identity of the folder being shown; a change cancels any in-progress rename.
+    var folderKey: FolderRef
     var actions: FileTableActions
 
     enum Column: String, CaseIterable {
@@ -86,6 +88,7 @@ struct FileTableView: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         let coordinator = context.coordinator
         coordinator.parent = self
+        coordinator.folderChanged(to: folderKey)
         coordinator.show(entries)
         coordinator.syncSelectionFromParent()
         coordinator.startRenameIfRequested()
@@ -96,7 +99,8 @@ struct FileTableView: NSViewRepresentable {
         var onReturn: (@MainActor () -> Void)?
 
         override func keyDown(with event: NSEvent) {
-            let plain = event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty
+            let plain = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                .subtracting([.numericPad, .function]).isEmpty
             if plain, event.keyCode == 36 || event.keyCode == 76, let onReturn {
                 onReturn()
                 return
@@ -116,6 +120,8 @@ struct FileTableView: NSViewRepresentable {
         /// Programmatic selection changes must not be echoed back into the SwiftUI binding.
         private var isApplyingSelection = false
         private var editingID: UInt32?
+        private var editingField: NSTextField?
+        private var currentFolderKey: FolderRef?
         private var renameCancelled = false
         private var renameScheduled = false
         private var menuTargets: [FileEntry] = []
@@ -124,7 +130,31 @@ struct FileTableView: NSViewRepresentable {
 
         // MARK: Data
 
+        /// Drops all editing state without committing (the field is gone or the folder changed).
+        private func resetEditing(notify: Bool) {
+            guard editingID != nil else { return }
+            editingID = nil
+            editingField?.isEditable = false
+            editingField = nil
+            renameCancelled = false
+            pendingEntries = nil
+            if notify {
+                Task { @MainActor [weak self] in self?.parent.actions.editingChanged(false) }
+            }
+        }
+
+        func folderChanged(to key: FolderRef) {
+            defer { currentFolderKey = key }
+            guard let old = currentFolderKey, old != key else { return }
+            let field = editingField
+            resetEditing(notify: true) // never commit a rename into a different folder
+            if field?.currentEditor() != nil { table?.window?.makeFirstResponder(table) }
+        }
+
         func show(_ entries: [FileEntry]) {
+            if editingID != nil, editingField?.currentEditor() == nil {
+                resetEditing(notify: true) // the editor went away without telling us
+            }
             if editingID != nil {
                 pendingEntries = entries
                 return
@@ -211,6 +241,10 @@ struct FileTableView: NSViewRepresentable {
         }
 
         func tableView(_ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]) {
+            if editingID != nil { // like Finder: clicking elsewhere commits the edit first
+                tableView.window?.makeFirstResponder(tableView)
+                if editingID != nil { resetEditing(notify: true) }
+            }
             resort()
         }
 
@@ -249,11 +283,15 @@ struct FileTableView: NSViewRepresentable {
             table.selectRowIndexes([row], byExtendingSelection: false)
             guard let cell = table.view(atColumn: nameColumn, row: row, makeIfNecessary: true) as? NSTableCellView,
                   let field = cell.textField else { return }
-            editingID = objectID
-            renameCancelled = false
             field.isEditable = true
             field.delegate = self
-            table.window?.makeFirstResponder(field)
+            guard table.window?.makeFirstResponder(field) == true else {
+                field.isEditable = false
+                return
+            }
+            editingID = objectID
+            editingField = field
+            renameCancelled = false
             let name = rows[row].name as NSString
             let base = rows[row].isFolder ? name : name.deletingPathExtension as NSString
             field.currentEditor()?.selectedRange = NSRange(location: 0, length: base.length)
@@ -272,6 +310,7 @@ struct FileTableView: NSViewRepresentable {
         func controlTextDidEndEditing(_ obj: Notification) {
             guard let field = obj.object as? NSTextField, let id = editingID else { return }
             editingID = nil
+            editingField = nil
             let typed = field.stringValue
             field.isEditable = false
             let entry = source.first { $0.objectID == id }
@@ -284,6 +323,7 @@ struct FileTableView: NSViewRepresentable {
                 show(pending)
             }
             if table?.window?.firstResponder !== table { table?.window?.makeFirstResponder(table) }
+            startRenameIfRequested()
         }
 
         // MARK: Context menu
@@ -352,7 +392,7 @@ struct FileTableView: NSViewRepresentable {
             guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self],
                                                                  options: [.urlReadingFileURLsOnly: true]) as? [URL],
                   !urls.isEmpty else { return false }
-            parent.actions.dropFiles(urls)
+            parent.actions.dropFiles(urls, tableView.window)
             return true
         }
 
