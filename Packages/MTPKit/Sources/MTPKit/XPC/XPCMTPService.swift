@@ -40,10 +40,10 @@ public final class XPCMTPService: MTPService, @unchecked Sendable {
         return url
     }
 
-    public func upload(jobID: UUID, fileURL: URL, to folder: FolderRef) async throws -> FileEntry {
-        guard case .entry(let entry) = try await send(.upload(jobID: jobID, fileURL: fileURL, folder: folder)) else {
-            throw MTPError.unexpectedResponse
-        }
+    public func upload(jobID: UUID, fileURL: URL, to folder: FolderRef,
+                       conflict: ConflictResolution) async throws -> FileEntry {
+        let request = XPCRequest.upload(jobID: jobID, fileURL: fileURL, folder: folder, conflict: conflict)
+        guard case .entry(let entry) = try await send(request) else { throw MTPError.unexpectedResponse }
         return entry
     }
 

@@ -15,7 +15,7 @@ enum XPCRequest: Codable, Sendable, Equatable {
     case storages(deviceID: DeviceID)
     case list(FolderRef)
     case download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, directory: URL)
-    case upload(jobID: UUID, fileURL: URL, folder: FolderRef)
+    case upload(jobID: UUID, fileURL: URL, folder: FolderRef, conflict: ConflictResolution)
     case createFolder(name: String, folder: FolderRef)
     case rename(objectID: UInt32, deviceID: DeviceID, newName: String)
     case delete(objectID: UInt32, deviceID: DeviceID)
