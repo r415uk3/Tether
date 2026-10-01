@@ -85,4 +85,56 @@ import Testing
         #expect(Transfers.safeName("") == "_")
         #expect(Transfers.safeName(".") == "_")
     }
+
+    @Test func keepsCollidingSiblingsInFolder() throws {
+        let folder = device.addFolder("Dup")
+        device.addFile("IMG.jpg", data: Data("1".utf8), in: folder.objectID)
+        device.addFile("IMG.jpg", data: Data("2".utf8), in: folder.objectID)
+        device.addFile("a/b.txt", data: Data("3".utf8), in: folder.objectID)
+        device.addFile("a-b.txt", data: Data("4".utf8), in: folder.objectID)
+        device.addFile("A.txt", data: Data("5".utf8), in: folder.objectID)
+        device.addFile("a.txt", data: Data("6".utf8), in: folder.objectID)
+        let dir = try makeTempDirectory()
+        let url = try Transfers.download(folder, from: device, into: dir) { _, _ in true }
+        let names = try contents(of: url)
+        #expect(names.count == 6)
+        #expect(Set(names.map { $0.lowercased() }).count == 6)
+        let all = try names.map { String(decoding: try Data(contentsOf: url.appendingPathComponent($0)), as: UTF8.self) }
+        #expect(Set(all) == ["1", "2", "3", "4", "5", "6"])
+        #expect(names.contains("IMG.jpg") && names.contains("IMG 2.jpg"))
+    }
+
+    @Test func folderCancelRemovesPartialTree() throws {
+        let folder = device.addFolder("Big")
+        device.addFile("x.bin", data: Data(count: 20_000), in: folder.objectID)
+        device.addFile("y.bin", data: Data(count: 20_000), in: folder.objectID)
+        let dir = try makeTempDirectory()
+        #expect(throws: MTPError.cancelled) {
+            try Transfers.download(folder, from: device, into: dir) { done, _ in done < 25_000 }
+        }
+        #expect(try contents(of: dir).isEmpty)
+    }
+
+    @Test func folderDisconnectRemovesPartialTree() throws {
+        let folder = device.addFolder("Big")
+        device.addFile("x.bin", data: Data(count: 20_000), in: folder.objectID)
+        device.addFile("y.bin", data: Data(count: 20_000), in: folder.objectID)
+        device.inject(.disconnectAfter(bytes: 25_000))
+        let dir = try makeTempDirectory()
+        #expect(throws: MTPError.deviceDisconnected) {
+            try Transfers.download(folder, from: device, into: dir) { _, _ in true }
+        }
+        #expect(try contents(of: dir).isEmpty)
+    }
+
+    @Test func existingFolderNameGetsSuffix() throws {
+        let folder = device.addFolder("Photos")
+        device.addFile("p.jpg", data: Data("p".utf8), in: folder.objectID)
+        let dir = try makeTempDirectory()
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("Photos"), withIntermediateDirectories: false)
+        let url = try Transfers.download(folder, from: device, into: dir) { _, _ in true }
+        #expect(url.lastPathComponent == "Photos 2")
+        #expect(try contents(of: url) == ["p.jpg"])
+        #expect(try contents(of: dir) == ["Photos", "Photos 2"])
+    }
 }
