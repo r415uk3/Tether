@@ -83,10 +83,17 @@ struct BrowserView: View {
             }
             .task(id: folder) { await model.devices.refresh(folder) }
             .onChange(of: folder) {
+                QuickLookController.shared.invalidate()
                 selectedIDs = []
                 renameRequest = nil
             }
-            .onChange(of: session) { path = [] }
+            .onChange(of: session) {
+                QuickLookController.shared.invalidate()
+                path = []
+            }
+            .onChange(of: selectedIDs) {
+                if QuickLookController.shared.isVisible { showQuickLook(selectedEntries) }
+            }
             .onChange(of: viewMode) {
                 renameRequest = nil
                 isEditingName = false
@@ -189,12 +196,18 @@ struct BrowserView: View {
             pathSession = session
             path.append(entry)
         } else {
-            quickLook([entry])
+            showQuickLook([entry]) // double-click replaces the preview; it never closes the panel
         }
     }
 
     private func quickLook(_ entries: [FileEntry]) {
         QuickLookController.shared.toggle(entries, deviceID: selection.deviceID, cache: model.previews) { error in
+            problem = error.localizedDescription
+        }
+    }
+
+    private func showQuickLook(_ entries: [FileEntry]) {
+        QuickLookController.shared.show(entries, deviceID: selection.deviceID, cache: model.previews) { error in
             problem = error.localizedDescription
         }
     }
