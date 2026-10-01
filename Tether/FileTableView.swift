@@ -1,4 +1,5 @@
 import AppKit
+import Quartz
 import SwiftUI
 import UniformTypeIdentifiers
 import MTPKit
@@ -16,6 +17,7 @@ struct FileTableActions {
     var download: ([FileEntry]) -> Void
     var delete: ([FileEntry]) -> Void
     var newFolder: () -> Void
+    var quickLook: ([FileEntry]) -> Void
 }
 
 /// Finder-style list backed by NSTableView: sortable columns, selection by object ID, inline rename,
@@ -74,6 +76,7 @@ struct FileTableView: NSViewRepresentable {
         table.registerForDraggedTypes([.fileURL])
         table.setDraggingSourceOperationMask(.copy, forLocal: false)
         table.onReturn = { [weak coordinator = context.coordinator] in coordinator?.returnPressed() }
+        table.onSpace = { [weak coordinator = context.coordinator] in coordinator?.spacePressed() }
         let menu = NSMenu()
         menu.delegate = context.coordinator
         table.menu = menu
@@ -97,6 +100,7 @@ struct FileTableView: NSViewRepresentable {
     /// Return starts a rename instead of NSTableView's default handling.
     final class FileTable: NSTableView {
         var onReturn: (@MainActor () -> Void)?
+        var onSpace: (@MainActor () -> Void)?
 
         override func keyDown(with event: NSEvent) {
             let plain = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -105,8 +109,16 @@ struct FileTableView: NSViewRepresentable {
                 onReturn()
                 return
             }
+            if plain, event.keyCode == 49, let onSpace {
+                onSpace()
+                return
+            }
             super.keyDown(with: event)
         }
+
+        override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
+        override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) { QuickLookController.shared.attach(panel) }
+        override func endPreviewPanelControl(_ panel: QLPreviewPanel!) { QuickLookController.shared.detach(panel) }
     }
 
     @MainActor
@@ -255,6 +267,11 @@ struct FileTableView: NSViewRepresentable {
         }
 
         // MARK: Rename
+
+        func spacePressed() {
+            guard editingID == nil else { return }
+            parent.actions.quickLook(selectedEntries)
+        }
 
         func returnPressed() {
             let selected = selectedEntries

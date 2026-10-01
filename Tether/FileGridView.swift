@@ -1,4 +1,5 @@
 import AppKit
+import Quartz
 import SwiftUI
 import UniformTypeIdentifiers
 import MTPKit
@@ -36,6 +37,7 @@ struct FileGridView: NSViewRepresentable {
         let coordinator = context.coordinator
         grid.onDoubleClick = { [weak coordinator] path in coordinator?.open(at: path) }
         grid.onReturn = { [weak coordinator] in coordinator?.returnPressed() }
+        grid.onSpace = { [weak coordinator] in coordinator?.spacePressed() }
         let menu = NSMenu()
         menu.delegate = coordinator
         grid.menu = menu
@@ -62,6 +64,7 @@ struct FileGridView: NSViewRepresentable {
     final class FileGrid: NSCollectionView {
         var onDoubleClick: (@MainActor (IndexPath) -> Void)?
         var onReturn: (@MainActor () -> Void)?
+        var onSpace: (@MainActor () -> Void)?
         private(set) var menuIndexPath: IndexPath?
 
         override func mouseDown(with event: NSEvent) {
@@ -83,8 +86,16 @@ struct FileGridView: NSViewRepresentable {
                 onReturn()
                 return
             }
+            if plain, event.keyCode == 49, let onSpace {
+                onSpace()
+                return
+            }
             super.keyDown(with: event)
         }
+
+        override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
+        override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) { QuickLookController.shared.attach(panel) }
+        override func endPreviewPanelControl(_ panel: QLPreviewPanel!) { QuickLookController.shared.detach(panel) }
     }
 
     final class FileGridItem: NSCollectionViewItem {
@@ -273,6 +284,8 @@ struct FileGridView: NSViewRepresentable {
             let selected = selectedEntries
             if selected.count == 1 { parent.actions.requestRename(selected[0]) }
         }
+
+        func spacePressed() { parent.actions.quickLook(selectedEntries) }
 
         // MARK: Context menu
 

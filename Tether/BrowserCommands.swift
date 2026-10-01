@@ -12,6 +12,7 @@ struct BrowserActions {
     var delete: (() -> Void)?
     var showIcons: (() -> Void)?
     var showList: (() -> Void)?
+    var quickLook: (() -> Void)?
 }
 
 extension FocusedValues {
@@ -31,6 +32,9 @@ struct BrowserCommands: Commands {
             Button("Open") { actions?.open?() }
                 .keyboardShortcut(.downArrow, modifiers: .command)
                 .disabled(actions?.open == nil)
+            Button("Quick Look") { actions?.quickLook?() }
+                .keyboardShortcut("y")
+                .disabled(actions?.quickLook == nil)
             Button("Download") { actions?.download?() }
                 .keyboardShortcut("d", modifiers: [.command, .option])
                 .disabled(actions?.download == nil)
