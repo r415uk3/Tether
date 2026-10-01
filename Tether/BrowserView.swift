@@ -147,7 +147,8 @@ struct BrowserView: View {
             },
             download: download,
             delete: requestDelete,
-            newFolder: newFolder)
+            newFolder: newFolder,
+            quickLook: quickLook)
     }
 
     private var menuActions: BrowserActions {
@@ -161,13 +162,15 @@ struct BrowserView: View {
         let renameAction: (() -> Void)? =
             selected.count == 1 && !editing ? { beginRename(selected[0]) } : nil
         let deleteAction: (() -> Void)? = selected.isEmpty || editing ? nil : { requestDelete(selected) }
+        let quickLookAction: (() -> Void)? =
+            selected.contains { !$0.isFolder } && !editing ? { quickLook(selected) } : nil
         let newFolderAction: (() -> Void)? = editing ? nil : { newFolder() }
         let showIconsAction: (() -> Void)? = editing ? nil : { viewMode = .icons }
         let showListAction: (() -> Void)? = editing ? nil : { viewMode = .list }
         return BrowserActions(
             newFolder: newFolderAction, refresh: refresh, goUp: goUpAction, open: openAction,
             download: downloadAction, rename: renameAction, delete: deleteAction,
-            showIcons: showIconsAction, showList: showListAction)
+            showIcons: showIconsAction, showList: showListAction, quickLook: quickLookAction)
     }
 
     // MARK: Actions
@@ -185,6 +188,14 @@ struct BrowserView: View {
         if entry.isFolder {
             pathSession = session
             path.append(entry)
+        } else {
+            quickLook([entry])
+        }
+    }
+
+    private func quickLook(_ entries: [FileEntry]) {
+        QuickLookController.shared.toggle(entries, deviceID: selection.deviceID, cache: model.previews) { error in
+            problem = error.localizedDescription
         }
     }
 
