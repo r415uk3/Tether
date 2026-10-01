@@ -11,6 +11,7 @@ public final class PreviewCache {
         let task: Task<URL, Error>
         let jobID: UUID
         let token: UUID
+        let deviceID: DeviceID
     }
     private var inFlight: [ItemKey: InFlight] = [:]
 
@@ -38,11 +39,16 @@ public final class PreviewCache {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             return try await service.download(jobID: jobID, entry: entry, deviceID: deviceID, into: folder)
         }
-        inFlight[key] = InFlight(task: task, jobID: jobID, token: token)
+        inFlight[key] = InFlight(task: task, jobID: jobID, token: token, deviceID: deviceID)
         defer { if inFlight[key]?.token == token { inFlight[key] = nil } } // clear() may have replaced it
         let url = try await task.value
         if inFlight[key]?.token == token { ready[key] = url }
         return url
+    }
+
+    /// True while a preview download occupies `deviceID` (it holds the device's serial worker).
+    public func isDownloading(deviceID: DeviceID) -> Bool {
+        inFlight.values.contains { $0.deviceID == deviceID }
     }
 
     public func clear() {
