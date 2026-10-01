@@ -17,8 +17,10 @@ public final class AppModel {
         transfers = TransferQueue(service: service)
         thumbnails = ThumbnailStore(service: service)
         previews = PreviewCache(service: service)
-        devices.isDeviceBusy = { [weak transfers] id in
-            transfers?.jobs.contains { $0.deviceID == id && $0.state == .running } ?? false
+        // Previews download on the same serial device worker as transfers, so they also make it busy.
+        devices.isDeviceBusy = { [weak transfers, weak previews] id in
+            transfers?.jobs.contains { $0.deviceID == id && $0.state == .running } == true
+                || previews?.isDownloading(deviceID: id) == true
         }
         devices.onDeviceBecameReady = { [weak transfers] id in transfers?.deviceReconnected(id) }
         transfers.onJobFinished = { [weak store = devices] job in
