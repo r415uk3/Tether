@@ -17,6 +17,7 @@ struct NoPhoneView: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier("noPhoneView")
     }
 
     private func step(_ number: Int, _ text: LocalizedStringKey) -> some View {
@@ -27,6 +28,7 @@ struct NoPhoneView: View {
                 .background(Circle().fill(.tint.opacity(0.2)))
             Text(text)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -3,6 +3,7 @@ import Quartz
 import SwiftUI
 import UniformTypeIdentifiers
 import MTPKit
+import TetherCore
 
 /// What the file list asks its owner to do. All closures run on the main actor.
 struct FileTableActions {
@@ -57,6 +58,7 @@ struct FileTableView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let table = FileTable()
+        table.setAccessibilityIdentifier("fileTable")
         table.style = .fullWidth
         table.usesAlternatingRowBackgroundColors = true
         table.allowsMultipleSelection = true
@@ -246,6 +248,8 @@ struct FileTableView: NSViewRepresentable {
             switch column {
             case .name:
                 cell.textField?.stringValue = entry.name
+                cell.setAccessibilityLabel(AccessibilityText.file(entry))
+                cell.setAccessibilityIdentifier(entry.name)
                 cell.imageView?.image = icon(for: entry)
             case .size:
                 cell.textField?.stringValue = entry.isFolder
@@ -431,6 +435,7 @@ struct FileTableView: NSViewRepresentable {
                 let image = NSImageView()
                 image.translatesAutoresizingMaskIntoConstraints = false
                 cell.addSubview(image)
+                image.setAccessibilityElement(false)
                 cell.imageView = image
                 NSLayoutConstraint.activate([
                     image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
