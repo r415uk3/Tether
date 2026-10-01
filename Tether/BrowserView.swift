@@ -190,7 +190,7 @@ struct BrowserView: View {
             return String(localized: "Preparing preview… \(Int(fraction * 100))%")
         }
         if listing?.isUpdating == true { return String(localized: "Updating…") }
-        guard listing != nil else { return "" }
+        guard let listing, listing.error == nil || !listing.entries.isEmpty else { return "" }
         return String(localized: "\(visibleEntries.count) items")
     }
 
