@@ -1,0 +1,267 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@ available" : {
+
+    },
+    "%lld" : {
+
+    },
+    "An item named “%@” already exists in this folder." : {
+
+    },
+    "Another App Is Using %@" : {
+
+    },
+    "Apply to all" : {
+
+    },
+    "Back" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Cancelled" : {
+
+    },
+    "Can’t Connect to %@" : {
+
+    },
+    "Can’t Read %@" : {
+
+    },
+    "Can’t Read This Folder" : {
+
+    },
+    "Choose" : {
+
+    },
+    "Choose…" : {
+
+    },
+    "Connect an Android Phone" : {
+
+    },
+    "Connect the phone with a USB cable." : {
+
+    },
+    "Copy Diagnostics" : {
+
+    },
+    "Date Modified" : {
+
+    },
+    "Delete" : {
+
+    },
+    "Delete %lld Items…" : {
+
+    },
+    "Delete %lld items?" : {
+
+    },
+    "Delete “%@”?" : {
+
+    },
+    "Delete…" : {
+
+    },
+    "Devices" : {
+
+    },
+    "Diagnostics Copied" : {
+
+    },
+    "Do you want to replace it with the one you’re copying?" : {
+
+    },
+    "Done" : {
+
+    },
+    "Download" : {
+
+    },
+    "Download %lld Items" : {
+
+    },
+    "Download to" : {
+
+    },
+    "Drop files here to copy them to the phone." : {
+
+    },
+    "Empty Folder" : {
+
+    },
+    "Enclosing Folder" : {
+
+    },
+    "Example: in the phone’s USB notification, File transfer is selected." : {
+
+    },
+    "File transfer" : {
+
+    },
+    "Go" : {
+
+    },
+    "Icons" : {
+
+    },
+    "Image Capture or Photos has taken the phone. Tether can ask it to let go." : {
+
+    },
+    "In the USB notification, choose “File transfer”." : {
+
+    },
+    "Keep Both" : {
+
+    },
+    "List" : {
+
+    },
+    "MIDI" : {
+
+    },
+    "Name" : {
+
+    },
+    "New Folder" : {
+
+    },
+    "No Storage Available" : {
+
+    },
+    "No data transfer" : {
+
+    },
+    "No transfers" : {
+
+    },
+    "OK" : {
+
+    },
+    "Open" : {
+
+    },
+    "Paste them into your bug report. They don’t include file names." : {
+
+    },
+    "Phone" : {
+
+    },
+    "Preparing preview… %lld%%" : {
+
+    },
+    "Quick Look" : {
+
+    },
+    "Reading your phone…" : {
+
+    },
+    "Refresh" : {
+
+    },
+    "Release" : {
+
+    },
+    "Releasing…" : {
+
+    },
+    "Rename" : {
+
+    },
+    "Rename “%@”" : {
+
+    },
+    "Replace" : {
+
+    },
+    "Retry" : {
+
+    },
+    "Show Hidden Files" : {
+
+    },
+    "Show hidden files" : {
+
+    },
+    "Show in Finder" : {
+
+    },
+    "Show items as icons or as a list" : {
+
+    },
+    "Size" : {
+
+    },
+    "Skip" : {
+
+    },
+    "Still held. Quit Image Capture and Photos." : {
+
+    },
+    "Tether" : {
+
+    },
+    "The Operation Couldn’t Be Completed" : {
+
+    },
+    "The phone is still held by another app. Quit Image Capture and Photos, then try again." : {
+
+    },
+    "This can’t be undone." : {
+
+    },
+    "Transfers" : {
+
+    },
+    "Try Again" : {
+
+    },
+    "USB tethering" : {
+
+    },
+    "Unlock %@" : {
+
+    },
+    "Unlock the phone and check that USB is set to File Transfer." : {
+
+    },
+    "Unlock the phone." : {
+
+    },
+    "Unlock your phone and choose “File transfer” in the USB notification. Tether connects automatically." : {
+
+    },
+    "Updating…" : {
+
+    },
+    "Upload" : {
+
+    },
+    "Use USB for" : {
+
+    },
+    "View" : {
+
+    },
+    "Waiting for you to unlock…" : {
+
+    },
+    "Waiting…" : {
+
+    },
+    "When a name already exists" : {
+
+    },
+    "as Icons" : {
+
+    },
+    "as List" : {
+
+    }
+  },
+  "version" : "1.0"
+}

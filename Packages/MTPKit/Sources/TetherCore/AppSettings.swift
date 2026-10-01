@@ -22,10 +22,10 @@ public enum ConflictDefault: String, CaseIterable, Sendable {
 
     public var title: String {
         switch self {
-        case .ask: String(localized: "Ask Every Time")
-        case .replace: String(localized: "Replace")
-        case .keepBoth: String(localized: "Keep Both")
-        case .skip: String(localized: "Skip")
+        case .ask: String(localized: "Ask Every Time", bundle: .module)
+        case .replace: String(localized: "Replace", bundle: .module)
+        case .keepBoth: String(localized: "Keep Both", bundle: .module)
+        case .skip: String(localized: "Skip", bundle: .module)
         }
     }
 }

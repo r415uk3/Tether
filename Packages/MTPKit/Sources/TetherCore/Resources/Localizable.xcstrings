@@ -1,0 +1,96 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "A name can’t be empty." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Имя не может быть пустым."
+          }
+        }
+      }
+    },
+    "Ask Every Time" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Всегда спрашивать"
+          }
+        }
+      }
+    },
+    "Keep Both" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Оставить оба"
+          }
+        }
+      }
+    },
+    "Names can’t contain “/” or be “.” or “..”." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Имя не может содержать «/» или быть «.» или «..»."
+          }
+        }
+      }
+    },
+    "Replace" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Заменить"
+          }
+        }
+      }
+    },
+    "Skip" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пропустить"
+          }
+        }
+      }
+    },
+    "The name “%@” is already taken. Please choose a different name." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Имя «%@» уже занято. Выберите другое имя."
+          }
+        }
+      }
+    },
+    "The phone was reconnected, so this folder may have changed. Upload the item again." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Телефон был переподключён, поэтому содержимое папки могло измениться. Загрузите объект ещё раз."
+          }
+        }
+      }
+    },
+    "untitled folder" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "новая папка"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
