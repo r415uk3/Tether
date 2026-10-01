@@ -31,6 +31,19 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         return result
     }
 
+    /// Converts a libmtp file record; libmtp reports root children with parent_id 0.
+    private static func entry(from f: UnsafeMutablePointer<LIBMTP_file_t>) -> FileEntry {
+        FileEntry(
+            objectID: f.pointee.item_id,
+            parentID: f.pointee.parent_id == 0 ? FileEntry.rootID : f.pointee.parent_id,
+            storageID: f.pointee.storage_id,
+            name: f.pointee.filename.map { String(cString: $0) } ?? "",
+            size: f.pointee.filesize,
+            modified: f.pointee.modificationdate == 0 ? nil
+                : Date(timeIntervalSince1970: TimeInterval(f.pointee.modificationdate)),
+            isFolder: f.pointee.filetype == LIBMTP_FILETYPE_FOLDER)
+    }
+
     func listFolder(storageID: UInt32, folderID: UInt32) throws -> [FileEntry] {
         let h = try requireHandle()
         LIBMTP_Clear_Errorstack(h)
@@ -38,21 +51,28 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         var file = LIBMTP_Get_Files_And_Folders(h, storageID, folderID)
         while let f = file {
             let next = f.pointee.next
-            entries.append(FileEntry(
-                objectID: f.pointee.item_id,
-                // libmtp reports root items with parent 0; callers list the root as FileEntry.rootID.
-                parentID: f.pointee.parent_id == 0 ? FileEntry.rootID : f.pointee.parent_id,
-                storageID: f.pointee.storage_id,
-                name: f.pointee.filename.map { String(cString: $0) } ?? "",
-                size: f.pointee.filesize,
-                modified: f.pointee.modificationdate == 0 ? nil : Date(timeIntervalSince1970: TimeInterval(f.pointee.modificationdate)),
-                isFolder: f.pointee.filetype == LIBMTP_FILETYPE_FOLDER))
+            entries.append(Self.entry(from: f))
             LIBMTP_destroy_file_t(f)
             file = next
         }
         // An empty folder and a failure both return NULL; the error stack tells them apart.
         if entries.isEmpty, LIBMTP_Get_Errorstack(h) != nil { throw lastError(h) }
         return entries
+    }
+
+    func objectInfo(objectID: UInt32) throws -> FileEntry? {
+        let h = try requireHandle()
+        LIBMTP_Clear_Errorstack(h)
+        guard let f = LIBMTP_Get_Filemetadata(h, objectID) else {
+            // A vanished handle is "no such object"; a dead connection must still surface as such.
+            if LIBMTP_Get_Errorstack(h) != nil, case .deviceDisconnected = lastError(h) {
+                throw MTPError.deviceDisconnected
+            }
+            LIBMTP_Clear_Errorstack(h)
+            return nil
+        }
+        defer { LIBMTP_destroy_file_t(f) }
+        return Self.entry(from: f)
     }
 
     func download(objectID: UInt32, to fileURL: URL, progress: ProgressHandler) throws {

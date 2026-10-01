@@ -27,6 +27,7 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     private var operationFaults: [(operation: Operation, skip: Int, error: MTPError)] = []
     private var disconnected = false
     private var closed = false
+    private var listCalls = 0
 
     public init(id: DeviceID = "fake-1", manufacturer: String = "Google", model: String = "Pixel 9",
                 storages: [StorageInfo] = [StorageInfo(id: 1, name: "Internal shared storage",
@@ -60,6 +61,8 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     public func data(of objectID: UInt32) -> Data? { lock.withLock { nodes[objectID]?.data } }
     public func storage(_ id: UInt32) -> StorageInfo? { lock.withLock { storageList.first { $0.id == id } } }
     public var isClosed: Bool { lock.withLock { closed } }
+    /// Number of `listFolder` calls so far (tests assert that verification doesn't list).
+    public var listFolderCalls: Int { lock.withLock { listCalls } }
 
     public func children(of parentID: UInt32, storageID: UInt32 = 1) -> [FileEntry] {
         lock.withLock {
@@ -77,9 +80,18 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     }
 
     public func listFolder(storageID: UInt32, folderID: UInt32) throws -> [FileEntry] {
+        lock.withLock { listCalls += 1 }
         try beginSimple()
         try lock.withLock { try requireFolder(folderID) }
         return children(of: folderID, storageID: storageID)
+    }
+
+    /// Never consumes injected faults, so a fault injected for a test still hits the operation under test.
+    public func objectInfo(objectID: UInt32) throws -> FileEntry? {
+        try lock.withLock {
+            if disconnected { throw MTPError.deviceDisconnected }
+            return nodes[objectID]?.entry
+        }
     }
 
     public func download(objectID: UInt32, to fileURL: URL, progress: ProgressHandler) throws {
