@@ -21,7 +21,10 @@ struct TetherApp: App {
                 .task { await model.start() }
                 .frame(minWidth: 720, minHeight: 420)
         }
-        .commands { BrowserCommands() }
+        .commands {
+            BrowserCommands()
+            DiagnosticsCommands(model: model)
+        }
 
         Settings {
             SettingsView()

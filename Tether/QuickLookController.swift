@@ -12,8 +12,12 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
     private var latestRequest = 0
     /// The request whose downloads are still running, if any.
     private var pendingRequest: Int?
+    /// Device and item IDs of the pending request, to recognise a repeat of the same selection.
+    private var pendingDevice: DeviceID?
+    private var pendingItems: [UInt32] = []
     /// The list or grid that currently controls the panel; key events are forwarded to it.
     private weak var controllingView: NSView?
+    private weak var lastCache: PreviewCache?
 
     var isVisible: Bool {
         QLPreviewPanel.sharedPreviewPanelExists() && QLPreviewPanel.shared()?.isVisible == true
@@ -37,11 +41,17 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
     /// Shows the files (folders are skipped), replacing whatever the panel shows; never closes it.
     func show(_ entries: [FileEntry], deviceID: DeviceID, cache: PreviewCache,
               onError: @escaping @MainActor (MTPError) -> Void) {
-        invalidate() // a download for the previous selection must not land after this one
         let files = entries.filter { !$0.isFolder }
+        // The same selection is already downloading (e.g. selection change then double-click): let it
+        // finish instead of cancelling and restarting from 0%.
+        if pendingRequest != nil, pendingDevice == deviceID, pendingItems == files.map(\.objectID) { return }
+        lastCache = cache
+        invalidate() // a download for the previous selection must not land after this one
         guard !files.isEmpty else { return }
         let request = latestRequest
         pendingRequest = request
+        pendingDevice = deviceID
+        pendingItems = files.map(\.objectID)
         Task {
             var ready: [URL] = []
             for entry in files {
@@ -50,6 +60,8 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
                 } catch {
                     if request == latestRequest {
                         pendingRequest = nil
+                        pendingDevice = nil
+                        pendingItems = []
                         onError(MTPError.from(error))
                     }
                     return
@@ -57,6 +69,8 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
             }
             guard request == latestRequest, let panel = QLPreviewPanel.shared() else { return }
             pendingRequest = nil
+            pendingDevice = nil
+            pendingItems = []
             urls = ready
             present(panel)
         }
@@ -66,6 +80,9 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
     func invalidate() {
         latestRequest += 1
         pendingRequest = nil
+        pendingDevice = nil
+        pendingItems = []
+        lastCache?.cancelAll()
     }
 
     private func present(_ panel: QLPreviewPanel) {

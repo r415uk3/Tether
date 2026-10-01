@@ -26,6 +26,15 @@ public final class TransferQueue {
         /// An upload that predates a reconnect of its device: its folder handle may now name another object.
         var isStale = false
 
+        /// False when retrying can't succeed (the upload belongs to an earlier connection).
+        public var canRetry: Bool {
+            switch state {
+            case .failed(.phoneReconnected): false
+            case .failed, .cancelled: !isStale
+            default: false
+            }
+        }
+
         public var name: String {
             switch kind {
             case .download(let entry, _, _): entry.name
@@ -55,8 +64,11 @@ public final class TransferQueue {
     @ObservationIgnored private var restartsInFlight = 0
     @ObservationIgnored private var watchdog: Task<Void, Never>?
 
-    public init(service: any MTPService) {
+    @ObservationIgnored private let log: DiagnosticLog
+
+    public init(service: any MTPService, log: DiagnosticLog = .shared) {
         self.service = service
+        self.log = log
     }
 
     public var hasActiveJobs: Bool { jobs.contains { $0.isActive } }
@@ -109,12 +121,22 @@ public final class TransferQueue {
         }
     }
 
-    public func updateProgress(attempt: UUID, done: UInt64, total: UInt64) {
+    @discardableResult
+    public func updateProgress(attempt: UUID, done: UInt64, total: UInt64) -> Bool {
         // No state check: the final event may arrive just after the job finished.
-        guard let i = jobs.firstIndex(where: { $0.attempt == attempt }) else { return }
+        guard let i = jobs.firstIndex(where: { $0.attempt == attempt }) else { return false }
         jobs[i].done = max(jobs[i].done, done)
         jobs[i].total = total
         jobs[i].lastActivity = .now
+        return true
+    }
+
+    /// Something else made progress on the device's serial worker (e.g. a Quick Look download), so a running
+    /// job queued behind it is waiting, not hung.
+    public func noteDeviceActivity(_ deviceID: DeviceID) {
+        for i in jobs.indices where jobs[i].state == .running && jobs[i].deviceID == deviceID {
+            jobs[i].lastActivity = .now
+        }
     }
 
     public func startWatchdog(interval: Duration = .seconds(5)) {
@@ -196,6 +218,16 @@ public final class TransferQueue {
         jobs[i].state = state
         if case .finished = state { jobs[i].done = max(jobs[i].done, jobs[i].total) }
         let job = jobs[i]
+        if case .failed(let error) = state {
+            // `total` stays 0 when the job failed before any progress; fall back to the known size.
+            let (kind, size): (String, UInt64) = switch job.kind {
+            case .download(let entry, _, _): ("download", job.total > 0 ? job.total : entry.size)
+            case .upload(let url, _, _):
+                ("upload", job.total > 0 ? job.total
+                    : ((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { $0 }.map(UInt64.init) ?? 0))
+            }
+            log.record("Transfer failed (\(kind), \(size) bytes): \(error.logDescription)", category: "transfer")
+        }
         if let completion = completions.removeValue(forKey: job.id) {
             switch state {
             case .finished(let url): completion(.success(url))

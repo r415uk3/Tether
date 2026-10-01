@@ -13,7 +13,13 @@ public final class DeviceStore {
 
     public private(set) var devices: [DeviceInfo] = []
     public private(set) var storages: [DeviceID: [StorageInfo]] = [:]
+    public private(set) var storageErrors: [DeviceID: MTPError] = [:]
+    /// Why the last Release of a phone failed; cleared on the next attempt, on success, and when the phone leaves the claimed state.
+    public private(set) var releaseErrors: [DeviceID: MTPError] = [:]
+    /// Phones with a Release in flight; a second request for the same phone is ignored.
+    public private(set) var releasing: Set<DeviceID> = []
     public private(set) var listings: [FolderRef: Listing] = [:]
+    public private(set) var hasLoaded = false
     public var listTimeout: Duration = .seconds(15)
 
     /// Reports whether a transfer is running on the device. A listing then queues behind it, so it must not
@@ -27,11 +33,33 @@ public final class DeviceStore {
     /// Bumped at the start of every refresh; only the latest refresh of a folder may write its result.
     @ObservationIgnored private var generations: [FolderRef: Int] = [:]
 
-    public init(service: any MTPService) {
+    @ObservationIgnored private let log: DiagnosticLog
+
+    public init(service: any MTPService, log: DiagnosticLog = .shared) {
         self.service = service
+        self.log = log
+    }
+
+    /// Asks the service to free a phone held by Image Capture; returns the error if it stays held.
+    /// Reloads the device list either way. After a successful release the device's ID changes from its
+    /// transport key to its serial identity, so callers must not keep using the old ID.
+    public func release(_ id: DeviceID) async -> MTPError? {
+        guard releasing.insert(id).inserted else { return nil }
+        defer { releasing.remove(id) }
+        releaseErrors[id] = nil
+        var failure: MTPError?
+        do {
+            try await service.releaseDevice(id)
+        } catch {
+            failure = MTPError.from(error)
+        }
+        await reloadDevices()
+        releaseErrors[id] = failure
+        return failure
     }
 
     public func reloadDevices() async {
+        defer { hasLoaded = true }
         // A transient failure must not wipe known devices, storages and cached listings.
         guard let list = try? await service.devices() else { return }
         apply(list)
@@ -53,6 +81,9 @@ public final class DeviceStore {
         })
         devices = newDevices
         storages = storages.filter { now[$0.key] != nil && !fresh.contains($0.key) }
+        storageErrors = storageErrors.filter { now[$0.key] != nil && !fresh.contains($0.key) }
+        let claimed = Set(newDevices.filter { $0.state == .unavailable(.claimedByOtherProcess) }.map(\.id))
+        releaseErrors = releaseErrors.filter { claimed.contains($0.key) }
         listings = listings.filter { key, _ in now[key.deviceID] != nil && !fresh.contains(key.deviceID) }
         for id in fresh {
             onDeviceBecameReady?(id)
@@ -61,8 +92,23 @@ public final class DeviceStore {
     }
 
     public func loadStorages(_ id: DeviceID) async {
-        guard let list = try? await service.storages(deviceID: id), isReady(id) else { return }
-        storages[id] = list
+        do {
+            let list = try await service.storages(deviceID: id)
+            guard isReady(id) else { return }
+            storages[id] = list
+            storageErrors[id] = nil
+        } catch {
+            guard isReady(id) else { return }
+            let mtpError = MTPError.from(error)
+            storageErrors[id] = mtpError
+            log.record("Storage list failed: \(mtpError.logDescription)", category: "browse")
+        }
+    }
+
+    /// Retries after a failure; clears the error first so the UI shows progress.
+    public func retryStorages(_ id: DeviceID) async {
+        storageErrors[id] = nil
+        await loadStorages(id)
     }
 
     public func storage(for folder: FolderRef) -> StorageInfo? {
@@ -105,6 +151,7 @@ public final class DeviceStore {
         case .success(let entries):
             listings[folder] = Listing(entries: entries, isUpdating: false, error: nil)
         case .failure(let error):
+            log.record("Listing failed: \(error.logDescription)", category: "browse")
             listings[folder] = Listing(entries: listings[folder]?.entries ?? [], isUpdating: false, error: error)
         }
     }

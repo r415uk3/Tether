@@ -15,12 +15,40 @@ import MTPKit
         return (DeviceStore(service: service), service)
     }
 
+    @Test func hasLoadedFlipsAfterTheFirstReload() async throws {
+        let (store, _) = makeStore()
+        #expect(!store.hasLoaded)
+        await store.reloadDevices()
+        #expect(store.hasLoaded)
+    }
+
+    @Test func hasLoadedAlsoFlipsWhenTheFirstReloadFails() async throws {
+        provider.attach(device)
+        let service = FlakyService(base: LocalMTPService(provider: provider))
+        service.failDevices = true
+        let store = DeviceStore(service: service)
+        await store.reloadDevices()
+        #expect(store.hasLoaded)
+        #expect(store.devices.isEmpty)
+    }
+
     @Test func reloadLoadsDevicesAndStorages() async throws {
         let (store, _) = makeStore()
         await store.reloadDevices()
         #expect(store.devices.map(\.id) == ["p1"])
         try await eventually { store.storages["p1"]?.first?.id == 1 }
         #expect(store.storage(for: folder)?.name == "Internal shared storage")
+    }
+
+    @Test func storageLoadFailureIsRecordedAndRetried() async throws {
+        let (store, _) = makeStore()
+        device.inject(.fail(.deviceBusy)) // consumed by the first storages() call
+        await store.reloadDevices()
+        try await eventually { store.storageErrors["p1"] == .deviceBusy }
+        #expect(store.storages["p1"] == nil)
+        await store.loadStorages("p1")
+        #expect(store.storageErrors["p1"] == nil)
+        #expect(store.storages["p1"]?.isEmpty == false)
     }
 
     @Test func refreshCachesListing() async throws {
@@ -173,6 +201,55 @@ import MTPKit
         #expect(store.devices.map(\.id) == ["p1"])
         #expect(store.listings[folder] != nil)
     }
+
+    @Test func releaseReportsFailure() async throws {
+        provider.attachUnavailable(AttachedDevice(id: "14-9", manufacturer: "S", model: "S25"), error: .claimedByOtherProcess)
+        let (store, _) = makeStore()
+        await store.reloadDevices()
+        #expect(await store.release("14-9") == .claimedByOtherProcess)
+    }
+
+    @Test func concurrentReleasesOfOnePhoneHitTheServiceOnce() async throws {
+        provider.attachClaimed(FakeDevice(id: "serial-A"), as: "14-4")
+        let (store, _) = makeStore()
+        await store.reloadDevices()
+        async let first = store.release("14-4")
+        async let second = store.release("14-4")
+        _ = await (first, second)
+        #expect(provider.releaseClaimsCalls == 1)
+        #expect(store.releasing.isEmpty)
+    }
+
+    @Test func failedReleaseIsRecordedAndClearedWhenStateChanges() async throws {
+        provider.attachClaimed(FakeDevice(id: "serial-A"), as: "14-4", releasable: false)
+        let (store, service) = makeStore()
+        await store.reloadDevices()
+        #expect(await store.release("14-4") == .claimedByOtherProcess)
+        #expect(store.releaseErrors["14-4"] == .claimedByOtherProcess)
+        provider.detach("14-4")
+        await service.rescan()
+        await store.reloadDevices()
+        #expect(store.releaseErrors.isEmpty)
+    }
+
+    @Test func storageErrorsAreDroppedWhenTheDeviceGoes() async throws {
+        let (store, service) = makeStore()
+        device.inject(.fail(.deviceBusy))
+        await store.reloadDevices()
+        try await eventually { store.storageErrors["p1"] == .deviceBusy }
+        provider.detach("p1")
+        await service.rescan()
+        await store.reloadDevices()
+        #expect(store.storageErrors.isEmpty)
+    }
+
+    @Test func releaseSucceedsAndListsDeviceReady() async throws {
+        provider.attachClaimed(FakeDevice(id: "serial-A"), as: "14-4")
+        let (store, _) = makeStore()
+        await store.reloadDevices()
+        #expect(await store.release("14-4") == nil)
+        #expect(store.devices.first { $0.id == "serial-A" }?.state == .ready)
+    }
 }
 
 private final class FlakyService: MTPService, @unchecked Sendable {
@@ -201,6 +278,8 @@ private final class FlakyService: MTPService, @unchecked Sendable {
         return try await base.devices()
     }
     func storages(deviceID: DeviceID) async throws -> [StorageInfo] { try await base.storages(deviceID: deviceID) }
+    func releaseDevice(_ deviceID: DeviceID) async throws { try await base.releaseDevice(deviceID) }
+    func diagnostics() async throws -> [String] { try await base.diagnostics() }
     func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
         try await base.thumbnail(objectID: objectID, in: folder)
     }

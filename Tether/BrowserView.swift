@@ -57,7 +57,7 @@ struct BrowserView: View {
         }
             .overlay { overlay(for: listing) }
             .navigationTitle(title)
-            .navigationSubtitle(listing?.isUpdating == true ? String(localized: "Updating…") : "")
+            .navigationSubtitle(subtitle(for: listing))
             .toolbar {
                 ToolbarItem(placement: .navigation) {
                     Button(action: goUp) { Label("Back", systemImage: "chevron.left") }
@@ -184,6 +184,13 @@ struct BrowserView: View {
     }
 
     // MARK: Actions
+
+    private func subtitle(for listing: DeviceStore.Listing?) -> String {
+        if let fraction = model.previews.progress {
+            return String(localized: "Preparing preview… \(Int(fraction * 100))%")
+        }
+        return listing?.isUpdating == true ? String(localized: "Updating…") : ""
+    }
 
     private func goUp() {
         if !path.isEmpty { path.removeLast() }

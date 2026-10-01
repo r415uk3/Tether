@@ -43,5 +43,8 @@ private func roundTrip<T: Codable & Equatable>(_ value: T) throws -> T {
                            .phoneReconnected,
                            .underlying(code: 1, message: "boom")]
     for error in all { #expect(!(error.errorDescription ?? "").isEmpty) }
+    // Retry is hidden for this case, so the text must not tell the user to retry.
+    #expect(!MTPError.phoneReconnected.errorDescription!.contains("retry"))
+    #expect(MTPError.phoneReconnected.errorDescription!.contains("Upload the item again"))
     #expect(MTPError.nameConflict("a.txt").errorDescription!.contains("a.txt"))
 }

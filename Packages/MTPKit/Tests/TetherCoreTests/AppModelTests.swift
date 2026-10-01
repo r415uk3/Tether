@@ -8,10 +8,15 @@ import MTPKit
     let provider = FakeDeviceProvider()
     let device = FakeDevice(id: "p1", chunkSize: 1024, chunkDelay: 0.002)
 
+    /// Always uses temp cache directories so tests never touch ~/Library/Caches.
+    func makeModel(_ service: any MTPService) throws -> AppModel {
+        AppModel(service: service, thumbnailDirectory: try makeTempDirectory(), previewDirectory: try makeTempDirectory())
+    }
+
     @Test func startLoadsDevicesAndRoutesProgress() async throws {
         provider.attach(device)
         let file = device.addFile("big.bin", data: Data(count: 100_000))
-        let model = AppModel(service: LocalMTPService(provider: provider))
+        let model = try makeModel(LocalMTPService(provider: provider))
         await model.start()
         #expect(model.devices.devices.map(\.id) == ["p1"])
         model.transfers.enqueueDownload(file, deviceID: "p1", into: try makeTempDirectory())
@@ -20,10 +25,20 @@ import MTPKit
         try await eventually { model.transfers.jobs[0].fraction == 1 }
     }
 
+    @Test func diagnosticsReportGivesUpOnAWedgedHelper() async throws {
+        provider.attach(device)
+        let model = try makeModel(HangingDiagnosticsService(base: LocalMTPService(provider: provider)))
+        model.diagnosticsTimeout = .milliseconds(100)
+        let started = ContinuousClock.now
+        let report = await model.diagnosticsReport(appVersion: "1.0")
+        #expect(ContinuousClock.now - started < .seconds(5))
+        #expect(report.contains("Helper log unavailable"))
+    }
+
     @Test func deviceEventsUpdateStore() async throws {
         provider.attach(device)
         let service = LocalMTPService(provider: provider)
-        let model = AppModel(service: service)
+        let model = try makeModel(service)
         await model.start()
         provider.detach("p1")
         await service.rescan()
@@ -32,7 +47,7 @@ import MTPKit
 
     @Test func finishedUploadRefreshesFolder() async throws {
         provider.attach(device)
-        let model = AppModel(service: LocalMTPService(provider: provider))
+        let model = try makeModel(LocalMTPService(provider: provider))
         await model.start()
         let folder = FolderRef(deviceID: "p1", storageID: 1)
         await model.devices.refresh(folder)
@@ -46,7 +61,7 @@ import MTPKit
         let slow = FakeDevice(id: "p1", chunkSize: 8192, chunkDelay: 0.01)
         provider.attach(slow)
         let file = slow.addFile("big.bin", data: Data(count: 1_000_000))
-        let model = AppModel(service: LocalMTPService(provider: provider))
+        let model = try makeModel(LocalMTPService(provider: provider))
         model.devices.listTimeout = .milliseconds(300)
         await model.start()
         let root = FolderRef(deviceID: "p1", storageID: 1)
@@ -65,18 +80,17 @@ import MTPKit
         let slow = FakeDevice(id: "p1", chunkSize: 8192, chunkDelay: 0.01)
         provider.attach(slow)
         let file = slow.addFile("big.bin", data: Data(count: 1_000_000))
-        let model = AppModel(service: LocalMTPService(provider: provider))
+        let model = try makeModel(LocalMTPService(provider: provider))
         model.devices.listTimeout = .milliseconds(300)
         await model.start()
         let root = FolderRef(deviceID: "p1", storageID: 1)
         let preview = Task { try await model.previews.file(for: file, deviceID: "p1") }
-        try await Task.sleep(for: .milliseconds(100)) // let the download occupy the device
+        try await eventually { model.previews.isDownloading(deviceID: "p1") }
         await model.devices.refresh(root)
         #expect(model.devices.listings[root]?.error == nil)
         #expect(model.devices.listings[root]?.entries.map(\.name) == ["big.bin"])
         #expect(provider.openCount("p1") == 1)
         _ = try await preview.value
-        model.previews.clear()
     }
 
     /// Replugs `phone` under a new USB key and waits until the model sees it ready again.
@@ -95,7 +109,7 @@ import MTPKit
         let phone = FakeDevice(id: "serial-ABC")
         provider.attach(phone, as: "14-4")
         let service = LocalMTPService(provider: provider)
-        let model = AppModel(service: service)
+        let model = try makeModel(service)
         await model.start()
         let folder = FolderRef(deviceID: "serial-ABC", storageID: 1)
         let file = try makeTempDirectory().appendingPathComponent("up.txt")
@@ -123,7 +137,7 @@ import MTPKit
         provider.attach(phone, as: "14-4")
         let entry = phone.addFile("a.txt", data: Data("x".utf8))
         let service = LocalMTPService(provider: provider)
-        let model = AppModel(service: service)
+        let model = try makeModel(service)
         await model.start()
         try await eventually { model.devices.storages["serial-ABC"] != nil } // so the fault hits the transfer
         phone.inject(.fail(.deviceDisconnected))
@@ -133,4 +147,47 @@ import MTPKit
         model.transfers.retry(id)
         try await eventually { if case .finished = model.transfers.jobs[0].state { true } else { false } }
     }
+
+    @Test func previewProgressEventsReachThePreviewCache() async throws {
+        provider.attach(device)
+        let file = device.addFile("big.bin", data: Data(count: 100_000))
+        let model = try makeModel(LocalMTPService(provider: provider))
+        await model.start()
+        let preview = Task { try await model.previews.file(for: file, deviceID: "p1") }
+        try await eventually { (model.previews.progress ?? 0) > 0 }
+        _ = try await preview.value
+        #expect(model.previews.progress == nil)
+    }
+}
+
+/// Forwards everything to a real service except `diagnostics()`, which never returns (a wedged helper).
+private final class HangingDiagnosticsService: MTPService, @unchecked Sendable {
+    let base: LocalMTPService
+    init(base: LocalMTPService) { self.base = base }
+    func setEventHandler(_ handler: @escaping @Sendable (ServiceEvent) -> Void) async { await base.setEventHandler(handler) }
+    func devices() async throws -> [DeviceInfo] { try await base.devices() }
+    func storages(deviceID: DeviceID) async throws -> [StorageInfo] { try await base.storages(deviceID: deviceID) }
+    func releaseDevice(_ deviceID: DeviceID) async throws { try await base.releaseDevice(deviceID) }
+    func diagnostics() async throws -> [String] {
+        while true { try await Task.sleep(for: .seconds(3600)) }
+    }
+    func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
+        try await base.thumbnail(objectID: objectID, in: folder)
+    }
+    func list(_ folder: FolderRef) async throws -> [FileEntry] { try await base.list(folder) }
+    func download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, into directory: URL) async throws -> URL {
+        try await base.download(jobID: jobID, entry: entry, deviceID: deviceID, into: directory)
+    }
+    func upload(jobID: UUID, fileURL: URL, to folder: FolderRef, conflict: ConflictResolution) async throws -> FileEntry {
+        try await base.upload(jobID: jobID, fileURL: fileURL, to: folder, conflict: conflict)
+    }
+    func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry {
+        try await base.createFolder(named: name, in: folder)
+    }
+    func rename(_ entry: FileEntry, in folder: FolderRef, to newName: String) async throws {
+        try await base.rename(entry, in: folder, to: newName)
+    }
+    func delete(_ entry: FileEntry, in folder: FolderRef) async throws { try await base.delete(entry, in: folder) }
+    func cancel(jobID: UUID) async { await base.cancel(jobID: jobID) }
+    func restart() async { await base.restart() }
 }

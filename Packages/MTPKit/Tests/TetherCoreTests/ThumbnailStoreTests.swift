@@ -120,4 +120,38 @@ final class TestClock {
         #expect(!ThumbnailStore.wantsThumbnail(entry("notes.txt")))
         #expect(!ThumbnailStore.wantsThumbnail(entry("Photos.jpg", folder: true)))
     }
+
+    @Test func memoryLimitEvictsOldestButDiskStillServesThem() async throws {
+        let photos = (0..<3).map { device.addFile("p\($0).jpg", data: Data(count: 10)) }
+        for photo in photos { device.setThumbnail(Data("t\(photo.objectID)".utf8), for: photo.objectID) }
+        provider.attach(device)
+        let service = LocalMTPService(provider: provider)
+        _ = try await service.devices()
+        let store = ThumbnailStore(service: service, directory: try makeTempDirectory(), memoryLimit: 2)
+        for photo in photos {
+            store.request(photo, in: folder)
+            try await eventually { store.pendingCount == 0 }
+        }
+        #expect(store.cached(photos[0], deviceID: "p1") == nil) // evicted
+        #expect(store.cached(photos[2], deviceID: "p1") != nil)
+        let calls = device.thumbnailCalls
+        store.request(photos[0], in: folder)
+        try await eventually { store.cached(photos[0], deviceID: "p1") != nil }
+        #expect(device.thumbnailCalls == calls) // came back from disk, not the phone
+    }
+
+    @Test func pruneDeletesOldestFilesUntilUnderTheLimit() async throws {
+        let dir = try makeTempDirectory()
+        let fm = FileManager.default
+        for (i, name) in ["old", "middle", "new"].enumerated() {
+            let url = dir.appendingPathComponent(name)
+            try Data(count: 100).write(to: url)
+            try fm.setAttributes([.modificationDate: Date(timeIntervalSince1970: TimeInterval(1_000 + i))],
+                                 ofItemAtPath: url.path)
+        }
+        await ThumbnailStore.pruneDirectory(dir, toAtMost: 200)
+        #expect(try fm.contentsOfDirectory(atPath: dir.path).sorted() == ["middle", "new"])
+        await ThumbnailStore.pruneDirectory(dir, toAtMost: 1_000) // already under: nothing removed
+        #expect(try fm.contentsOfDirectory(atPath: dir.path).count == 2)
+    }
 }

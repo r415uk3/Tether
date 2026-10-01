@@ -25,12 +25,31 @@ struct SidebarView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                            if error == .claimedByOtherProcess {
+                                ReleaseButton(deviceID: device.id)
+                            }
                         }
                     }
                 }
             }
         }
         .navigationSplitViewColumnWidth(min: 190, ideal: 230)
+    }
+}
+
+private struct ReleaseButton: View {
+    @Environment(AppModel.self) private var model
+    let deviceID: DeviceID
+
+    var body: some View {
+        Button("Release") { Task { _ = await model.devices.release(deviceID) } }
+            .controlSize(.small)
+            .disabled(model.devices.releasing.contains(deviceID))
+        if model.devices.releaseErrors[deviceID] != nil {
+            Text("Still held. Quit Image Capture and Photos.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

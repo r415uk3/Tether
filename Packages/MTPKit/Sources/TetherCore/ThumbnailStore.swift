@@ -16,14 +16,27 @@ public final class ThumbnailStore {
     @ObservationIgnored private let directory: URL?
     @ObservationIgnored private let now: @MainActor () -> Date
 
+    public static let defaultMemoryLimit = 1500
+    public static let defaultDiskLimit: UInt64 = 256 * 1024 * 1024
+    @ObservationIgnored private let memoryLimit: Int
+    /// Insertion order of `memory`'s keys, oldest first (FIFO eviction).
+    @ObservationIgnored private var memoryOrder: [ItemKey] = []
+
     private static let missingRetryInterval: TimeInterval = 10 * 60
     private static let failureRetryInterval: TimeInterval = 15
 
     public init(service: any MTPService, directory: URL? = ThumbnailStore.defaultDirectory,
+                memoryLimit: Int = ThumbnailStore.defaultMemoryLimit,
                 now: @escaping @MainActor () -> Date = Date.init) {
         self.service = service
         self.directory = directory
+        self.memoryLimit = max(1, memoryLimit)
         self.now = now
+        if let directory {
+            Task.detached(priority: .background) {
+                await ThumbnailStore.pruneDirectory(directory, toAtMost: ThumbnailStore.defaultDiskLimit)
+            }
+        }
     }
 
     /// Number of thumbnails currently loading (test hook).
@@ -96,7 +109,31 @@ public final class ThumbnailStore {
     }
 
     private func store(_ data: Data, for key: ItemKey) {
-        memory[key] = data
+        if memory.updateValue(data, forKey: key) == nil { memoryOrder.append(key) }
+        if memory.count > memoryLimit {
+            let target = max(1, memoryLimit * 9 / 10)
+            let excess = memory.count - target
+            for old in memoryOrder.prefix(excess) { memory[old] = nil }
+            memoryOrder.removeFirst(min(excess, memoryOrder.count))
+        }
         version += 1
+    }
+
+    /// Deletes the least recently written files until the directory holds at most `maxBytes`.
+    public nonisolated static func pruneDirectory(_ directory: URL, toAtMost maxBytes: UInt64) async {
+        await Task.detached {
+            let fm = FileManager.default
+            let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
+            guard let urls = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys) else { return }
+            var files: [(url: URL, size: UInt64, date: Date)] = []
+            for url in urls {
+                guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+                files.append((url, UInt64(values.fileSize ?? 0), values.contentModificationDate ?? .distantPast))
+            }
+            var total = files.reduce(UInt64(0)) { $0 + $1.size }
+            for file in files.sorted(by: { $0.date < $1.date }) where total > maxBytes {
+                if (try? fm.removeItem(at: file.url)) != nil { total -= min(file.size, total) }
+            }
+        }.value
     }
 }
