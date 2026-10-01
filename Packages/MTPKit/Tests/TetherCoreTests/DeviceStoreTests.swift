@@ -57,8 +57,37 @@ import MTPKit
         info.session = UUID()
         store.apply([info])
         #expect(store.listings.isEmpty)
+        #expect(store.storages.isEmpty)
         #expect(reconnected == ["p1"])
         #expect(store.session(for: "p1") == info.session)
+    }
+
+    @Test func reapplyingTheSameSessionKeepsEverything() async throws {
+        let (store, _) = makeStore()
+        await store.reloadDevices()
+        await store.refresh(folder)
+        var reconnected: [DeviceID] = []
+        store.onDeviceBecameReady = { reconnected.append($0) }
+        store.apply(store.devices)
+        #expect(reconnected.isEmpty)
+        #expect(store.listings[folder] != nil)
+    }
+
+    @Test func oldSessionRefreshFinishingAfterReconnectDoesNotRecreateListing() async throws {
+        provider.attach(device)
+        let service = FlakyService(base: LocalMTPService(provider: provider))
+        let store = DeviceStore(service: service)
+        await store.reloadDevices()
+        let old = FolderRef(deviceID: "p1", storageID: 1, session: store.session(for: "p1"))
+        service.holdNextList = true
+        let refresh = Task { await store.refresh(old) }
+        try await eventually { service.heldListStarted }
+        var info = try #require(store.devices.first)
+        info.session = UUID()
+        store.apply([info])
+        service.releaseHeldList = true
+        await refresh.value
+        #expect(store.listings[old] == nil)
     }
 
     @Test func removedDeviceDropsListings() async throws {
