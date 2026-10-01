@@ -65,8 +65,12 @@ extension Transfers {
                                        progress: ProgressHandler) throws {
         var items: [RemoteItem] = []
         func walk(_ folderID: UInt32, _ prefix: [String]) throws {
+            // Lowercased names already used in this folder (APFS is usually case-insensitive).
+            var used = Set<String>()
             for child in try device.listFolder(storageID: folder.storageID, folderID: folderID) {
-                let components = prefix + [safeName(child.name)]
+                let name = uniqueName(for: safeName(child.name)) { used.contains($0.lowercased()) }
+                used.insert(name.lowercased())
+                let components = prefix + [name]
                 items.append(RemoteItem(components: components, entry: child))
                 if child.isFolder { try walk(child.objectID, components) }
             }
