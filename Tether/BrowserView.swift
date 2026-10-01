@@ -73,16 +73,13 @@ struct BrowserView: View {
                     .disabled(isEditingName)
                     .help("Show items as icons or as a list")
                 }
-                ToolbarItem {
+                TetherToolbarSpacer()
+                ToolbarItemGroup {
                     Button(action: refresh) { Label("Refresh", systemImage: "arrow.clockwise") }
                         .help("Refresh")
-                }
-                ToolbarItem {
                     Button(action: newFolder) { Label("New Folder", systemImage: "folder.badge.plus") }
                         .help("New Folder")
                         .disabled(isEditingName)
-                }
-                ToolbarItem {
                     Button(action: chooseFilesToUpload) { Label("Upload", systemImage: "square.and.arrow.up") }
                         .help("Upload")
                 }
