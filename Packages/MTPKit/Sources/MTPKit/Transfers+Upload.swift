@@ -20,7 +20,9 @@ extension Transfers {
         var sent: UInt64 = 0
         do {
             for item in items {
-                let parent = folderIDs[Array(item.components.dropLast())]!
+                guard let parent = folderIDs[Array(item.components.dropLast())] else {
+                    throw MTPError.underlying(code: -3, message: "Unexpected path while uploading \(name)")
+                }
                 let itemName = item.components.last!
                 let created: FileEntry
                 if item.isDirectory {
@@ -68,7 +70,7 @@ struct LocalItem {
 
     /// Pre-order list (folders before their contents), hidden files skipped.
     static func scan(_ source: URL) throws -> [LocalItem] {
-        let keys: Set<URLResourceKey> = [.isDirectoryKey, .fileSizeKey]
+        let keys: Set<URLResourceKey> = [.isDirectoryKey, .fileSizeKey, .isSymbolicLinkKey]
         let rootValues = try source.resourceValues(forKeys: keys)
         let rootIsDirectory = rootValues.isDirectory ?? false
         var items = [LocalItem(components: [source.lastPathComponent], url: source, isDirectory: rootIsDirectory,
@@ -81,6 +83,7 @@ struct LocalItem {
                                                               options: [.skipsHiddenFiles]) else { return items }
         for case let url as URL in enumerator {
             let values = try url.resourceValues(forKeys: keys)
+            if values.isSymbolicLink == true { continue } // links are skipped, never followed
             let isDirectory = values.isDirectory ?? false
             let relative = url.resolvingSymlinksInPath().pathComponents.dropFirst(rootDepth)
             items.append(LocalItem(components: [source.lastPathComponent] + relative, url: url,
