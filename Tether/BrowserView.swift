@@ -67,6 +67,7 @@ struct BrowserView: View {
                         Label("List", systemImage: "list.bullet").tag(BrowserViewMode.list)
                     }
                     .pickerStyle(.segmented)
+                    .disabled(isEditingName)
                     .help("Show items as icons or as a list")
                 }
                 ToolbarItem {
@@ -74,6 +75,7 @@ struct BrowserView: View {
                 }
                 ToolbarItem {
                     Button(action: newFolder) { Label("New Folder", systemImage: "folder.badge.plus") }
+                        .disabled(isEditingName)
                 }
                 ToolbarItem {
                     Button(action: chooseFilesToUpload) { Label("Upload", systemImage: "square.and.arrow.up") }
@@ -85,6 +87,10 @@ struct BrowserView: View {
                 renameRequest = nil
             }
             .onChange(of: session) { path = [] }
+            .onChange(of: viewMode) {
+                renameRequest = nil
+                isEditingName = false
+            }
             .focusedSceneValue(\.browserActions, menuActions)
             .confirmationDialog(deleteTitle, isPresented: isConfirmingDelete) {
                 let items = pendingDelete
@@ -155,9 +161,13 @@ struct BrowserView: View {
         let renameAction: (() -> Void)? =
             selected.count == 1 && !editing ? { beginRename(selected[0]) } : nil
         let deleteAction: (() -> Void)? = selected.isEmpty || editing ? nil : { requestDelete(selected) }
+        let newFolderAction: (() -> Void)? = editing ? nil : { newFolder() }
+        let showIconsAction: (() -> Void)? = editing ? nil : { viewMode = .icons }
+        let showListAction: (() -> Void)? = editing ? nil : { viewMode = .list }
         return BrowserActions(
-            newFolder: newFolder, refresh: refresh, goUp: goUpAction, open: openAction,
-            download: downloadAction, rename: renameAction, delete: deleteAction)
+            newFolder: newFolderAction, refresh: refresh, goUp: goUpAction, open: openAction,
+            download: downloadAction, rename: renameAction, delete: deleteAction,
+            showIcons: showIconsAction, showList: showListAction)
     }
 
     // MARK: Actions
@@ -184,6 +194,7 @@ struct BrowserView: View {
         Task {
             do {
                 let created = try await model.devices.createFolder(named: name, in: folder)
+                guard self.folder == folder else { return }
                 selectedIDs = [created.objectID]
                 beginRename(created)
             } catch {

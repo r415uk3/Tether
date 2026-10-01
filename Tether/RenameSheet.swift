@@ -20,7 +20,6 @@ struct RenameSheet: View {
             TextField("Name", text: $name)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 320)
-                .onSubmit(commit)
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }

@@ -3,13 +3,15 @@ import TetherCore
 
 /// What the focused browser can do right now; `nil` members disable their menu items.
 struct BrowserActions {
-    var newFolder: () -> Void
+    var newFolder: (() -> Void)?
     var refresh: () -> Void
     var goUp: (() -> Void)?
     var open: (() -> Void)?
     var download: (() -> Void)?
     var rename: (() -> Void)?
     var delete: (() -> Void)?
+    var showIcons: (() -> Void)?
+    var showList: (() -> Void)?
 }
 
 extension FocusedValues {
@@ -19,13 +21,12 @@ extension FocusedValues {
 struct BrowserCommands: Commands {
     @FocusedValue(\.browserActions) private var actions
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
-    @AppStorage(SettingsKey.viewMode) private var viewMode = BrowserViewMode.list
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("New Folder") { actions?.newFolder() }
+            Button("New Folder") { actions?.newFolder?() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
-                .disabled(actions == nil)
+                .disabled(actions?.newFolder == nil)
             Divider()
             Button("Open") { actions?.open?() }
                 .keyboardShortcut(.downArrow, modifiers: .command)
@@ -40,10 +41,12 @@ struct BrowserCommands: Commands {
                 .disabled(actions?.delete == nil)
         }
         CommandGroup(after: .sidebar) {
-            Button("as Icons") { viewMode = .icons }
+            Button("as Icons") { actions?.showIcons?() }
                 .keyboardShortcut("1")
-            Button("as List") { viewMode = .list }
+                .disabled(actions?.showIcons == nil)
+            Button("as List") { actions?.showList?() }
                 .keyboardShortcut("2")
+                .disabled(actions?.showList == nil)
             Divider()
             Button("Refresh") { actions?.refresh() }
                 .keyboardShortcut("r")
