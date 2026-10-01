@@ -55,8 +55,11 @@ public final class TransferQueue {
     @ObservationIgnored private var restartsInFlight = 0
     @ObservationIgnored private var watchdog: Task<Void, Never>?
 
-    public init(service: any MTPService) {
+    @ObservationIgnored private let log: DiagnosticLog
+
+    public init(service: any MTPService, log: DiagnosticLog = .shared) {
         self.service = service
+        self.log = log
     }
 
     public var hasActiveJobs: Bool { jobs.contains { $0.isActive } }
@@ -198,6 +201,16 @@ public final class TransferQueue {
         jobs[i].state = state
         if case .finished = state { jobs[i].done = max(jobs[i].done, jobs[i].total) }
         let job = jobs[i]
+        if case .failed(let error) = state {
+            // `total` stays 0 when the job failed before any progress; fall back to the known size.
+            let (kind, size): (String, UInt64) = switch job.kind {
+            case .download(let entry, _, _): ("download", job.total > 0 ? job.total : entry.size)
+            case .upload(let url, _, _):
+                ("upload", job.total > 0 ? job.total
+                    : ((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { $0 }.map(UInt64.init) ?? 0))
+            }
+            log.record("Transfer failed (\(kind), \(size) bytes): \(error.logDescription)", category: "transfer")
+        }
         if let completion = completions.removeValue(forKey: job.id) {
             switch state {
             case .finished(let url): completion(.success(url))

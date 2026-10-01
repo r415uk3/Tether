@@ -65,3 +65,27 @@ struct BrowserCommands: Commands {
         }
     }
 }
+
+struct DiagnosticsCommands: Commands {
+    let model: AppModel
+
+    var body: some Commands {
+        CommandGroup(after: .help) {
+            Button("Copy Diagnostics") { copyDiagnostics() }
+        }
+    }
+
+    private func copyDiagnostics() {
+        let info = Bundle.main.infoDictionary
+        let version = "\(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))"
+        Task { @MainActor in
+            let report = await model.diagnosticsReport(appVersion: version)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(report, forType: .string)
+            let alert = NSAlert()
+            alert.messageText = String(localized: "Diagnostics Copied")
+            alert.informativeText = String(localized: "Paste them into your bug report. They don’t include file names.")
+            alert.runModal()
+        }
+    }
+}

@@ -27,8 +27,11 @@ public final class DeviceStore {
     /// Bumped at the start of every refresh; only the latest refresh of a folder may write its result.
     @ObservationIgnored private var generations: [FolderRef: Int] = [:]
 
-    public init(service: any MTPService) {
+    @ObservationIgnored private let log: DiagnosticLog
+
+    public init(service: any MTPService, log: DiagnosticLog = .shared) {
         self.service = service
+        self.log = log
     }
 
     /// Asks the service to free a phone held by Image Capture; returns the error if it stays held.
@@ -119,6 +122,7 @@ public final class DeviceStore {
         case .success(let entries):
             listings[folder] = Listing(entries: entries, isUpdating: false, error: nil)
         case .failure(let error):
+            log.record("Listing failed: \(error.logDescription)", category: "browse")
             listings[folder] = Listing(entries: listings[folder]?.entries ?? [], isUpdating: false, error: error)
         }
     }
