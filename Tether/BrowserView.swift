@@ -61,6 +61,7 @@ struct BrowserView: View {
             .toolbar {
                 ToolbarItem(placement: .navigation) {
                     Button(action: goUp) { Label("Back", systemImage: "chevron.left") }
+                        .help("Back")
                         .disabled(path.isEmpty || isEditingName)
                 }
                 ToolbarItem {
@@ -74,13 +75,16 @@ struct BrowserView: View {
                 }
                 ToolbarItem {
                     Button(action: refresh) { Label("Refresh", systemImage: "arrow.clockwise") }
+                        .help("Refresh")
                 }
                 ToolbarItem {
                     Button(action: newFolder) { Label("New Folder", systemImage: "folder.badge.plus") }
+                        .help("New Folder")
                         .disabled(isEditingName)
                 }
                 ToolbarItem {
                     Button(action: chooseFilesToUpload) { Label("Upload", systemImage: "square.and.arrow.up") }
+                        .help("Upload")
                 }
             }
             .task(id: folder) { await model.devices.refresh(folder) }

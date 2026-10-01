@@ -34,12 +34,6 @@
         "ru" : {
           "variations" : {
             "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld объект"
-                }
-              },
               "few" : {
                 "stringUnit" : {
                   "state" : "translated",
@@ -50,6 +44,12 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld объектов"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld объект"
                 }
               },
               "other" : {
@@ -109,6 +109,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Отменить"
+          }
+        }
+      }
+    },
+    "Cancel %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отменить %@"
           }
         }
       }
@@ -246,12 +256,6 @@
         "ru" : {
           "variations" : {
             "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Удалить %lld объект…"
-                }
-              },
               "few" : {
                 "stringUnit" : {
                   "state" : "translated",
@@ -262,6 +266,12 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "Удалить %lld объектов…"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Удалить %lld объект…"
                 }
               },
               "other" : {
@@ -298,12 +308,6 @@
         "ru" : {
           "variations" : {
             "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Удалить %lld объект?"
-                }
-              },
               "few" : {
                 "stringUnit" : {
                   "state" : "translated",
@@ -314,6 +318,12 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "Удалить %lld объектов?"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Удалить %lld объект?"
                 }
               },
               "other" : {
@@ -420,12 +430,6 @@
         "ru" : {
           "variations" : {
             "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Загрузить %lld объект"
-                }
-              },
               "few" : {
                 "stringUnit" : {
                   "state" : "translated",
@@ -436,6 +440,12 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "Загрузить %lld объектов"
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Загрузить %lld объект"
                 }
               },
               "other" : {
@@ -719,6 +729,16 @@
         }
       }
     },
+    "Release %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Освободить %@"
+          }
+        }
+      }
+    },
     "Releasing…" : {
       "localizations" : {
         "ru" : {
@@ -765,6 +785,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Повторить"
+          }
+        }
+      }
+    },
+    "Retry %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторить %@"
+          }
+        }
+      }
+    },
+    "Show %@ in Finder" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показать %@ в Finder"
           }
         }
       }
