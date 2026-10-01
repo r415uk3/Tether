@@ -26,7 +26,10 @@ struct ContentView: View {
                     description: Text("Connect an Android phone with a USB cable, unlock it, and choose “File transfer” in the USB notification."))
             }
         }
-        .onChange(of: selection) { path = [] }
+        .onChange(of: selection) {
+            path = []
+            if selection == nil { ensureSelection() } // empty-space click deselects; keep a ready storage selected
+        }
         .onChange(of: model.devices.storages, initial: true) { ensureSelection() }
         .onChange(of: model.devices.devices) { ensureSelection() }
     }
