@@ -74,3 +74,9 @@ public struct FolderRef: Codable, Hashable, Sendable {
         self.folderID = folderID
     }
 }
+
+extension String {
+    /// The key two names are compared by when checking for clashes on the phone. Android shared storage
+    /// (emulated /sdcard, FAT/exFAT cards) is case-insensitive, so "B.txt" and "b.txt" are the same name.
+    public var nameKey: String { lowercased() }
+}

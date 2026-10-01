@@ -56,4 +56,15 @@ import MTPKit
         #expect(questions == [.init(name: "a.txt", remaining: 0)])
         #expect(plan == [.init(url: url("/x/a.txt"), conflict: .fail), .init(url: url("/y/a.txt"), conflict: .keepBoth)])
     }
+
+    @Test func clashesIgnoreCase() async {
+        var questions: [ConflictQuestion] = []
+        let plan = await UploadPlanner.plan([url("/m/A.TXT"), url("/x/b.txt"), url("/y/B.txt")], existingNames: ["a.txt"],
+                                            defaultChoice: nil) { q in
+            questions.append(q)
+            return .init(choice: .keepBoth, applyToAll: false)
+        }
+        #expect(questions == [.init(name: "A.TXT", remaining: 1), .init(name: "B.txt", remaining: 0)])
+        #expect(plan.map(\.conflict) == [.keepBoth, .fail, .keepBoth])
+    }
 }

@@ -14,7 +14,7 @@ extension Transfers {
         }
         let name = source.lastPathComponent
         let existing = try device.listFolder(storageID: storageID, folderID: parentID)
-        let clashing = existing.filter { $0.name == name }
+        let clashing = existing.filter { $0.name.nameKey == name.nameKey }
         let uploadName = try destinationName(for: name, clashing: clashing, existing: existing, conflict: conflict)
         let items = uploadName == name ? scanned : scanned.map { $0.renamingRoot(to: uploadName) }
 
@@ -62,11 +62,11 @@ extension Transfers {
     private static func destinationName(for name: String, clashing: [FileEntry], existing: [FileEntry],
                                         conflict: ConflictResolution) throws -> String {
         guard !clashing.isEmpty else { return name }
-        let taken = Set(existing.map(\.name))
+        let taken = Set(existing.map(\.name.nameKey))
         switch conflict {
         case .fail: throw MTPError.nameConflict(name)
-        case .keepBoth: return uniqueName(for: name) { taken.contains($0) }
-        case .replace: return uniqueName(for: name + ".tether-upload") { taken.contains($0) }
+        case .keepBoth: return uniqueName(for: name) { taken.contains($0.nameKey) }
+        case .replace: return uniqueName(for: name + ".tether-upload") { taken.contains($0.nameKey) }
         }
     }
 
