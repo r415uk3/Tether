@@ -20,6 +20,9 @@ public final class DeviceStore {
     /// be timed out (which would restart the service and kill the transfer); the transfer watchdog covers hangs.
     @ObservationIgnored public var isDeviceBusy: (@MainActor (DeviceID) -> Bool)?
 
+    /// Called for each device that has just become ready (first seen, or back after an unplug).
+    @ObservationIgnored public var onDeviceBecameReady: (@MainActor (DeviceID) -> Void)?
+
     @ObservationIgnored private let service: any MTPService
     /// Bumped at the start of every refresh; only the latest refresh of a folder may write its result.
     @ObservationIgnored private var generations: [FolderRef: Int] = [:]
@@ -41,6 +44,7 @@ public final class DeviceStore {
         storages = storages.filter { readyNow.contains($0.key) }
         listings = listings.filter { readyNow.contains($0.key.deviceID) }
         for id in readyNow.subtracting(readyBefore) {
+            onDeviceBecameReady?(id)
             Task { await loadStorages(id) }
         }
     }

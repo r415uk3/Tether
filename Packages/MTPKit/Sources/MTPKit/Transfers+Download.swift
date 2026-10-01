@@ -8,6 +8,7 @@ extension Transfers {
     /// Writes to `<name>.partial` first, so failures never leave a broken item behind.
     public static func download(_ entry: FileEntry, from device: any MTPDevice, into directory: URL,
                                 progress: ProgressHandler) throws -> URL {
+        try verify(entry, on: device)
         let fm = FileManager.default
         let final = uniqueURL(for: entry.name, in: directory)
         let partial = directory.appendingPathComponent(final.lastPathComponent + ".partial")
@@ -24,6 +25,15 @@ extension Transfers {
             try? fm.removeItem(at: partial)
             throw MTPError.from(error)
         }
+    }
+
+    /// Checks that `entry` still describes the object on the phone. Android builds a new object database for
+    /// each USB connection, so after a replug an old handle can point at a different object (or none).
+    static func verify(_ entry: FileEntry, on device: any MTPDevice) throws {
+        let siblings = try device.listFolder(storageID: entry.storageID, folderID: entry.parentID)
+        let current = siblings.first { $0.objectID == entry.objectID }
+        guard let current, current.name == entry.name, current.isFolder == entry.isFolder,
+              entry.isFolder || current.size == entry.size else { throw MTPError.notFound }
     }
 
     /// Makes a phone-supplied name safe as a single macOS path component.

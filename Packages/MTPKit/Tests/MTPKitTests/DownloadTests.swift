@@ -14,6 +14,37 @@ import Testing
         #expect(try contents(of: dir) == ["a.txt"])
     }
 
+    @Test func verifiesEntryBeforeDownloading() throws {
+        let folder = device.addFolder("Docs")
+        let nested = device.addFile("n.txt", data: Data("n".utf8), in: folder.objectID)
+        let dir = try makeTempDirectory()
+        _ = try Transfers.download(folder, from: device, into: dir) { _, _ in true }
+        let url = try Transfers.download(nested, from: device, into: dir) { _, _ in true }
+        #expect(try Data(contentsOf: url) == Data("n".utf8))
+        #expect(try contents(of: dir) == ["Docs", "n.txt"])
+    }
+
+    /// After a replug the phone may reuse handles for different objects; a stale entry must not download them.
+    @Test func staleEntryIsNotFound() throws {
+        let file = device.addFile("a.txt", data: Data("hello".utf8))
+        let folder = device.addFolder("Docs")
+        let dir = try makeTempDirectory()
+        var renamed = file
+        renamed.name = "other.txt"
+        var resized = file
+        resized.size = 99
+        var asFile = folder
+        asFile.isFolder = false
+        let missing = FileEntry(objectID: 999, parentID: FileEntry.rootID, storageID: 1, name: "a.txt", size: 5,
+                                modified: nil, isFolder: false)
+        for stale in [renamed, resized, asFile, missing] {
+            #expect(throws: MTPError.notFound) {
+                try Transfers.download(stale, from: self.device, into: dir) { _, _ in true }
+            }
+        }
+        #expect(try contents(of: dir).isEmpty)
+    }
+
     @Test func keepsExistingFiles() throws {
         let file = device.addFile("a.txt", data: Data("new".utf8))
         let dir = try makeTempDirectory()
