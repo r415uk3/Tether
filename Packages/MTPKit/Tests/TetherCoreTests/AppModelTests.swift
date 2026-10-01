@@ -8,10 +8,15 @@ import MTPKit
     let provider = FakeDeviceProvider()
     let device = FakeDevice(id: "p1", chunkSize: 1024, chunkDelay: 0.002)
 
+    /// Always uses temp cache directories so tests never touch ~/Library/Caches.
+    func makeModel(_ service: any MTPService) throws -> AppModel {
+        AppModel(service: service, thumbnailDirectory: try makeTempDirectory(), previewDirectory: try makeTempDirectory())
+    }
+
     @Test func startLoadsDevicesAndRoutesProgress() async throws {
         provider.attach(device)
         let file = device.addFile("big.bin", data: Data(count: 100_000))
-        let model = AppModel(service: LocalMTPService(provider: provider))
+        let model = try makeModel(LocalMTPService(provider: provider))
         await model.start()
         #expect(model.devices.devices.map(\.id) == ["p1"])
         model.transfers.enqueueDownload(file, deviceID: "p1", into: try makeTempDirectory())
@@ -23,7 +28,7 @@ import MTPKit
     @Test func deviceEventsUpdateStore() async throws {
         provider.attach(device)
         let service = LocalMTPService(provider: provider)
-        let model = AppModel(service: service)
+        let model = try makeModel(service)
         await model.start()
         provider.detach("p1")
         await service.rescan()
@@ -32,7 +37,7 @@ import MTPKit
 
     @Test func finishedUploadRefreshesFolder() async throws {
         provider.attach(device)
-        let model = AppModel(service: LocalMTPService(provider: provider))
+        let model = try makeModel(LocalMTPService(provider: provider))
         await model.start()
         let folder = FolderRef(deviceID: "p1", storageID: 1)
         await model.devices.refresh(folder)
@@ -46,7 +51,7 @@ import MTPKit
         let slow = FakeDevice(id: "p1", chunkSize: 8192, chunkDelay: 0.01)
         provider.attach(slow)
         let file = slow.addFile("big.bin", data: Data(count: 1_000_000))
-        let model = AppModel(service: LocalMTPService(provider: provider))
+        let model = try makeModel(LocalMTPService(provider: provider))
         model.devices.listTimeout = .milliseconds(300)
         await model.start()
         let root = FolderRef(deviceID: "p1", storageID: 1)
@@ -65,8 +70,7 @@ import MTPKit
         let slow = FakeDevice(id: "p1", chunkSize: 8192, chunkDelay: 0.01)
         provider.attach(slow)
         let file = slow.addFile("big.bin", data: Data(count: 1_000_000))
-        let model = AppModel(service: LocalMTPService(provider: provider),
-                             thumbnailDirectory: try makeTempDirectory(), previewDirectory: try makeTempDirectory())
+        let model = try makeModel(LocalMTPService(provider: provider))
         model.devices.listTimeout = .milliseconds(300)
         await model.start()
         let root = FolderRef(deviceID: "p1", storageID: 1)
@@ -95,7 +99,7 @@ import MTPKit
         let phone = FakeDevice(id: "serial-ABC")
         provider.attach(phone, as: "14-4")
         let service = LocalMTPService(provider: provider)
-        let model = AppModel(service: service)
+        let model = try makeModel(service)
         await model.start()
         let folder = FolderRef(deviceID: "serial-ABC", storageID: 1)
         let file = try makeTempDirectory().appendingPathComponent("up.txt")
@@ -123,7 +127,7 @@ import MTPKit
         provider.attach(phone, as: "14-4")
         let entry = phone.addFile("a.txt", data: Data("x".utf8))
         let service = LocalMTPService(provider: provider)
-        let model = AppModel(service: service)
+        let model = try makeModel(service)
         await model.start()
         try await eventually { model.devices.storages["serial-ABC"] != nil } // so the fault hits the transfer
         phone.inject(.fail(.deviceDisconnected))
