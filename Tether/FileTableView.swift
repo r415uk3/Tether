@@ -3,13 +3,29 @@ import SwiftUI
 import UniformTypeIdentifiers
 import MTPKit
 
-/// Finder-style list backed by NSTableView: sortable columns, multi-select,
-/// drag-out via file promises, drop-in of Finder files.
+/// What the file list asks its owner to do. All closures run on the main actor.
+struct FileTableActions {
+    var open: (FileEntry) -> Void
+    var dropFiles: ([URL]) -> Void
+    var makePromise: (FileEntry) -> NSFilePromiseProvider
+    var requestRename: (FileEntry) -> Void
+    var commitRename: (FileEntry, String) -> Void
+    /// Called once the requested rename has started, so the owner can clear its request.
+    var renameStarted: () -> Void
+    var editingChanged: (Bool) -> Void
+    var download: ([FileEntry]) -> Void
+    var delete: ([FileEntry]) -> Void
+    var newFolder: () -> Void
+}
+
+/// Finder-style list backed by NSTableView: sortable columns, selection by object ID, inline rename,
+/// context menu, drag-out via file promises, drop-in of Finder files.
 struct FileTableView: NSViewRepresentable {
     var entries: [FileEntry]
-    var onOpen: (FileEntry) -> Void
-    var onDropFiles: ([URL]) -> Void
-    var makePromise: (FileEntry) -> NSFilePromiseProvider
+    @Binding var selection: Set<UInt32>
+    /// Object whose name should be edited as soon as its row exists.
+    var renameRequest: UInt32?
+    var actions: FileTableActions
 
     enum Column: String, CaseIterable {
         case name, size, modified
@@ -36,7 +52,7 @@ struct FileTableView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let table = NSTableView()
+        let table = FileTable()
         table.style = .fullWidth
         table.usesAlternatingRowBackgroundColors = true
         table.allowsMultipleSelection = true
@@ -55,6 +71,10 @@ struct FileTableView: NSViewRepresentable {
         table.doubleAction = #selector(Coordinator.openClicked(_:))
         table.registerForDraggedTypes([.fileURL])
         table.setDraggingSourceOperationMask(.copy, forLocal: false)
+        table.onReturn = { [weak coordinator = context.coordinator] in coordinator?.returnPressed() }
+        let menu = NSMenu()
+        menu.delegate = context.coordinator
+        table.menu = menu
         context.coordinator.table = table
 
         let scroll = NSScrollView()
@@ -64,20 +84,51 @@ struct FileTableView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        context.coordinator.parent = self
-        context.coordinator.show(entries)
+        let coordinator = context.coordinator
+        coordinator.parent = self
+        coordinator.show(entries)
+        coordinator.syncSelectionFromParent()
+        coordinator.startRenameIfRequested()
+    }
+
+    /// Return starts a rename instead of NSTableView's default handling.
+    final class FileTable: NSTableView {
+        var onReturn: (@MainActor () -> Void)?
+
+        override func keyDown(with event: NSEvent) {
+            let plain = event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty
+            if plain, event.keyCode == 36 || event.keyCode == 76, let onReturn {
+                onReturn()
+                return
+            }
+            super.keyDown(with: event)
+        }
     }
 
     @MainActor
-    final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
+    final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSMenuDelegate {
         var parent: FileTableView
         weak var table: NSTableView?
         private var source: [FileEntry] = []
         private var rows: [FileEntry] = []
+        /// Entries that arrived while a name was being edited; applied when editing ends.
+        private var pendingEntries: [FileEntry]?
+        /// Programmatic selection changes must not be echoed back into the SwiftUI binding.
+        private var isApplyingSelection = false
+        private var editingID: UInt32?
+        private var renameCancelled = false
+        private var renameScheduled = false
+        private var menuTargets: [FileEntry] = []
 
         init(parent: FileTableView) { self.parent = parent }
 
+        // MARK: Data
+
         func show(_ entries: [FileEntry]) {
+            if editingID != nil {
+                pendingEntries = entries
+                return
+            }
             guard entries != source else { return }
             source = entries
             resort()
@@ -101,8 +152,43 @@ struct FileTableView: NSViewRepresentable {
                 if a.isFolder != b.isFolder { return a.isFolder } // folders first, like Finder
                 return ascending ? less(a, b) : less(b, a)
             }
+            isApplyingSelection = true
             table?.reloadData()
+            isApplyingSelection = false
+            applySelection()
         }
+
+        // MARK: Selection (by object ID)
+
+        private var selectedIDsInTable: Set<UInt32> {
+            guard let table else { return [] }
+            return Set(table.selectedRowIndexes.compactMap { rows.indices.contains($0) ? rows[$0].objectID : nil })
+        }
+
+        private func applySelection() {
+            guard let table else { return }
+            let indexes = IndexSet(rows.indices.filter { parent.selection.contains(rows[$0].objectID) })
+            isApplyingSelection = true
+            table.selectRowIndexes(indexes, byExtendingSelection: false)
+            isApplyingSelection = false
+        }
+
+        func syncSelectionFromParent() {
+            if selectedIDsInTable != parent.selection { applySelection() }
+        }
+
+        func tableViewSelectionDidChange(_ notification: Notification) {
+            guard !isApplyingSelection else { return }
+            let ids = selectedIDsInTable
+            if ids != parent.selection { parent.selection = ids }
+        }
+
+        private var selectedEntries: [FileEntry] {
+            guard let table else { return [] }
+            return table.selectedRowIndexes.compactMap { rows.indices.contains($0) ? rows[$0] : nil }
+        }
+
+        // MARK: Table data source / delegate
 
         func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
 
@@ -131,13 +217,123 @@ struct FileTableView: NSViewRepresentable {
         @objc func openClicked(_ sender: NSTableView) {
             let row = sender.clickedRow
             guard rows.indices.contains(row) else { return }
-            parent.onOpen(rows[row])
+            parent.actions.open(rows[row])
         }
+
+        // MARK: Rename
+
+        func returnPressed() {
+            let selected = selectedEntries
+            guard editingID == nil, selected.count == 1 else { return }
+            parent.actions.requestRename(selected[0])
+        }
+
+        /// Starts the owner's pending rename on the next run loop turn (never during a SwiftUI update).
+        func startRenameIfRequested() {
+            guard let id = parent.renameRequest, !renameScheduled,
+                  rows.contains(where: { $0.objectID == id }) else { return }
+            renameScheduled = true
+            Task { @MainActor [weak self] in // next main-actor turn, outside the SwiftUI update
+                guard let self else { return }
+                self.renameScheduled = false
+                self.parent.actions.renameStarted()
+                self.beginEditing(objectID: id)
+            }
+        }
+
+        private func beginEditing(objectID: UInt32) {
+            guard let table, let row = rows.firstIndex(where: { $0.objectID == objectID }) else { return }
+            let nameColumn = table.column(withIdentifier: Column.name.identifier)
+            guard nameColumn >= 0 else { return }
+            table.scrollRowToVisible(row)
+            table.selectRowIndexes([row], byExtendingSelection: false)
+            guard let cell = table.view(atColumn: nameColumn, row: row, makeIfNecessary: true) as? NSTableCellView,
+                  let field = cell.textField else { return }
+            editingID = objectID
+            renameCancelled = false
+            field.isEditable = true
+            field.delegate = self
+            table.window?.makeFirstResponder(field)
+            let name = rows[row].name as NSString
+            let base = rows[row].isFolder ? name : name.deletingPathExtension as NSString
+            field.currentEditor()?.selectedRange = NSRange(location: 0, length: base.length)
+            parent.actions.editingChanged(true)
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+                renameCancelled = true
+                control.window?.makeFirstResponder(table) // ends editing → controlTextDidEndEditing
+                return true
+            }
+            return false
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            guard let field = obj.object as? NSTextField, let id = editingID else { return }
+            editingID = nil
+            let typed = field.stringValue
+            field.isEditable = false
+            let entry = source.first { $0.objectID == id }
+            if let entry { field.stringValue = entry.name } // the refresh after a successful rename shows the new name
+            parent.actions.editingChanged(false)
+            if !renameCancelled, let entry { parent.actions.commitRename(entry, typed) }
+            renameCancelled = false
+            if let pending = pendingEntries {
+                pendingEntries = nil
+                show(pending)
+            }
+            if table?.window?.firstResponder !== table { table?.window?.makeFirstResponder(table) }
+        }
+
+        // MARK: Context menu
+
+        func menuNeedsUpdate(_ menu: NSMenu) {
+            menu.removeAllItems()
+            guard let table, editingID == nil else { return }
+            let clicked = table.clickedRow
+            if rows.indices.contains(clicked) {
+                if !table.selectedRowIndexes.contains(clicked) {
+                    table.selectRowIndexes([clicked], byExtendingSelection: false) // Finder: right-click selects
+                }
+                menuTargets = selectedEntries
+            } else {
+                menuTargets = []
+            }
+            let targets = menuTargets
+            if !targets.isEmpty {
+                if targets.count == 1, targets[0].isFolder {
+                    menu.addItem(item(String(localized: "Open"), #selector(openFromMenu)))
+                }
+                menu.addItem(item(targets.count == 1 ? String(localized: "Download")
+                                                     : String(localized: "Download \(targets.count) Items"),
+                                  #selector(downloadFromMenu)))
+                menu.addItem(.separator())
+                if targets.count == 1 { menu.addItem(item(String(localized: "Rename"), #selector(renameFromMenu))) }
+                menu.addItem(item(targets.count == 1 ? String(localized: "Delete…")
+                                                     : String(localized: "Delete \(targets.count) Items…"),
+                                  #selector(deleteFromMenu)))
+                menu.addItem(.separator())
+            }
+            menu.addItem(item(String(localized: "New Folder"), #selector(newFolderFromMenu)))
+        }
+
+        private func item(_ title: String, _ action: Selector) -> NSMenuItem {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            return item
+        }
+
+        @objc private func openFromMenu() { if let entry = menuTargets.first { parent.actions.open(entry) } }
+        @objc private func downloadFromMenu() { parent.actions.download(menuTargets) }
+        @objc private func renameFromMenu() { if let entry = menuTargets.first { parent.actions.requestRename(entry) } }
+        @objc private func deleteFromMenu() { parent.actions.delete(menuTargets) }
+        @objc private func newFolderFromMenu() { parent.actions.newFolder() }
 
         // MARK: Drag out
 
         func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
-            parent.makePromise(rows[row])
+            parent.actions.makePromise(rows[row])
         }
 
         // MARK: Drop in
@@ -156,7 +352,7 @@ struct FileTableView: NSViewRepresentable {
             guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self],
                                                                  options: [.urlReadingFileURLsOnly: true]) as? [URL],
                   !urls.isEmpty else { return false }
-            parent.onDropFiles(urls)
+            parent.actions.dropFiles(urls)
             return true
         }
 
