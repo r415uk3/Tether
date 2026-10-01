@@ -159,6 +159,16 @@ import MTPKit
         device.releaseHang()
     }
 
+    @Test func updateProgressReportsWhetherTheJobIsKnown() async throws {
+        let file = device.addFile("a.txt", data: Data("x".utf8))
+        let (queue, _) = try await makeQueue()
+        device.inject(.hang)
+        queue.enqueueDownload(file, deviceID: "p1", into: try makeTempDirectory())
+        #expect(queue.updateProgress(attempt: queue.jobs[0].attempt, done: 1, total: 2))
+        #expect(!queue.updateProgress(attempt: UUID(), done: 1, total: 2))
+        device.releaseHang()
+    }
+
     @Test func noRestartWhileProgressing() async throws {
         let file = device.addFile("a.txt", data: Data("x".utf8))
         let (queue, _) = try await makeQueue()
