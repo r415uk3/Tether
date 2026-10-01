@@ -25,6 +25,16 @@ private let ru = Bundle(url: Bundle.module.url(forResource: "ru", withExtension:
         #expect(MTPError.unexpectedResponse.errorDescription?.contains("MTPHelper") == false)
         #expect(MTPError.underlying(code: 13, message: "Disk full").errorDescription == "Disk full")
     }
+
+    @Test(arguments: [-4, -5, -6]) func tetherLocalizedUnderlyingMessagesPassThrough(_ code: Int) {
+        #expect(MTPError.underlying(code: code, message: "x").errorDescription == "x")
+    }
+
+    @Test(arguments: [-1, -3]) func helperInternalNegativeCodesGetGenericText(_ code: Int) {
+        let text = MTPError.underlying(code: code, message: "raw detail").errorDescription
+        #expect(text != "raw detail" && text?.contains("raw detail") == false)
+        #expect(text?.isEmpty == false)
+    }
 }
 
 /// Lines of the module's Swift sources, with "File.swift:line" locations.
