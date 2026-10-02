@@ -5,6 +5,8 @@ import TetherCore
 struct BrowserActions {
     var newFolder: (() -> Void)?
     var refresh: () -> Void
+    var goBack: (() -> Void)?
+    var goForward: (() -> Void)?
     var goUp: (() -> Void)?
     var open: (() -> Void)?
     var download: (() -> Void)?
@@ -64,6 +66,12 @@ struct BrowserCommands: Commands {
                 .keyboardShortcut(".", modifiers: [.command, .shift])
         }
         CommandMenu("Go") {
+            Button("Back") { actions?.goBack?() }
+                .keyboardShortcut("[")
+                .disabled(actions?.goBack == nil)
+            Button("Forward") { actions?.goForward?() }
+                .keyboardShortcut("]")
+                .disabled(actions?.goForward == nil)
             Button("Enclosing Folder") { actions?.goUp?() }
                 .keyboardShortcut(.upArrow, modifiers: .command)
                 .disabled(actions?.goUp == nil)
