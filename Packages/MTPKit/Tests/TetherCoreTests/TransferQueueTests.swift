@@ -177,7 +177,7 @@ import MTPKit
         let (queue, _) = try await makeQueue()
         device.inject(.hang)
         queue.enqueueDownload(file, deviceID: "p1", into: try makeTempDirectory())
-        try await Task.sleep(for: .milliseconds(50))
+        try await eventually { device.downloadCalls == 1 }
         await queue.checkForStalls(now: .now + .seconds(31))
         try await eventually { queue.jobs[0].state == .failed(.serviceInterrupted) }
         #expect(provider.openCount("p1") == 2)
@@ -221,7 +221,7 @@ import MTPKit
         let dir = try makeTempDirectory()
         queue.enqueueDownload(a, deviceID: "p1", into: dir)
         queue.enqueueDownload(b, deviceID: "p1", into: dir)
-        try await Task.sleep(for: .milliseconds(50))
+        try await eventually { device.downloadCalls == 1 }
         provider.holdOpens("p1")
         let check = Task { await queue.checkForStalls(now: .now + .seconds(31)) }
         try await Task.sleep(for: .milliseconds(150))

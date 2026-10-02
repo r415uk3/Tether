@@ -78,7 +78,7 @@ import MTPKit
         let file = device.addFile("big.bin", data: Data(repeating: 1, count: 40 * 1024)) // ~800 ms
         let (cache, _) = try await makeCache()
         let first = Task { try await cache.file(for: file, deviceID: "p1") }
-        try await Task.sleep(for: .milliseconds(100))
+        try await eventually { device.downloadCalls == 1 }
         #expect(device.downloadCalls == 1)
         cache.clear()
         let url = try await cache.file(for: file, deviceID: "p1")
