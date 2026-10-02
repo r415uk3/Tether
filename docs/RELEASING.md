@@ -63,6 +63,9 @@ If the **gh-pages push fails after the Release was created**, the DMG is public 
 Delete the Release and the tag as above and re-run by re-tagging. The appcast is only changed by the last step, so
 there is nothing to roll back there. The build number must still exceed every build already in the appcast.
 
+Package unit tests run through `xcodebuild test -scheme MTPKit-Package -destination 'platform=macOS'` (in CI, both
+workflows) or `swift test` with Xcode 27+, because older command-line SwiftPM does not compile string catalogs.
+
 `scripts/appcast.sh` and its test (`scripts/test-appcast.sh`, also run in CI) can be used by hand:
 `scripts/appcast.sh <dmg> <version> <build> <download-url> <ed-signature> <appcast.xml>`.
 

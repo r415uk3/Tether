@@ -65,8 +65,8 @@ private func isTranslated(_ localization: [String: Any]?) -> Bool {
         #expect(offenders.isEmpty, "Missing bundle: .module: \(offenders)")
     }
 
-    @Test func conflictChoicesAreRussian() {
-        let ru = Bundle(url: Bundle.module.url(forResource: "ru", withExtension: "lproj")!)!
+    @Test func conflictChoicesAreRussian() throws {
+        let ru = try russianBundle()
         #expect(ru.localizedString(forKey: "Keep Both", value: "?", table: nil) == "Оставить оба")
     }
 }
