@@ -31,7 +31,10 @@ fi
 grep -q "<sparkle:version>$BUILD</sparkle:version>" "$FEED" && { echo "build $BUILD already in feed" >&2; exit 1; }
 LAST=$(sed -n 's:.*<sparkle\:version>\([0-9]*\)</sparkle\:version>.*:\1:p' "$FEED" | sort -n | tail -1)
 [ -z "$LAST" ] || [ "$BUILD" -gt "$LAST" ] || { echo "build $BUILD not greater than $LAST" >&2; exit 1; }
-# Insert the item right after <language>…</language>.
-ITEM="$ITEM" perl -0pi -e 's#(</language>\n)#$1$ENV{ITEM}\n#' "$FEED"
+# Normalise CRLF, then insert before the first <item>, else before </channel>.
+perl -pi -e 's/\r$//' "$FEED"
+grep -q '</channel>' "$FEED" || { echo "feed has no </channel>" >&2; exit 1; }
+ITEM="$ITEM" perl -0pi -e 'if (/^[ \t]*<item>/m) { s#^([ \t]*<item>)#$ENV{ITEM}\n$1#m } else { s#([ \t]*</channel>)#$ENV{ITEM}\n$1# }' "$FEED"
+grep -q "<sparkle:version>$BUILD</sparkle:version>" "$FEED" || { echo "failed to insert item into $FEED" >&2; exit 1; }
 xmllint --noout "$FEED"
 echo "appcast: added $VERSION ($BUILD), $LEN bytes"
