@@ -15,6 +15,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$VERSION" ] || VERSION=$(sed -n 's/^ *MARKETING_VERSION: *"\{0,1\}\([0-9.]*\)"\{0,1\}/\1/p' project.yml | head -1)
+BUILD_ARG="$BUILD"
+[ -n "$BUILD_ARG" ] || [ "$(git rev-parse --is-shallow-repository)" = false ] || { echo "shallow clone; pass --build" >&2; exit 2; }
 [ -n "$BUILD" ] || BUILD=$(git rev-list --count HEAD)
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad version '$VERSION'" >&2; exit 2; }
 [[ "$BUILD" =~ ^[0-9]+$ ]] || { echo "bad build '$BUILD'" >&2; exit 2; }
@@ -28,7 +30,8 @@ if ! xcodebuild -project Tether.xcodeproj -scheme Tether -configuration Release 
       clean build >"$LOG" 2>&1; then
   tail -40 "$LOG" >&2; echo "release build failed (log: $LOG)" >&2; exit 1
 fi
-grep -E "warning: .*\.swift" "$LOG" && { echo "Swift warnings in Release build" >&2; exit 1; }
+warns=$(grep -E '\.(swift|m|c|h):[0-9]+:[0-9]+: warning:' "$LOG" | sort -u || true)
+[ -z "$warns" ] || { echo "$warns" >&2; echo "compiler warnings in Release build" >&2; exit 1; }
 
 APP="$OUT/Tether.app"
 rm -rf "$APP" && ditto "$DD/Build/Products/Release/Tether.app" "$APP"
@@ -62,16 +65,25 @@ echo "built $DMG ($(stat -f %z "$DMG") bytes), version $VERSION ($BUILD)"
 
 if [ $SMOKE -eq 1 ]; then
   # Mount, copy out like a user would, launch in real mode, confirm the helper loads libmtp.
-  MNT=$(mktemp -d); hdiutil attach -nobrowse -readonly -mountpoint "$MNT" "$DMG" >/dev/null
-  TRY=$(mktemp -d); ditto "$MNT/Tether.app" "$TRY/Tether.app"; hdiutil detach "$MNT" >/dev/null
-  before=$(ls ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -c -E "^(Tether|MTPHelper)" || true)
-  CACHE=$(mktemp -d)
+  MNT=$(mktemp -d); TRY=$(mktemp -d); CACHE=$(mktemp -d); MARK=$(mktemp); pid=""
+  cleanup() {
+    [ -z "$pid" ] || kill "$pid" 2>/dev/null || true
+    hdiutil detach "$MNT" >/dev/null 2>&1 || true
+    rm -rf "$TRY" "$CACHE" "$MARK" "$MNT"
+  }
+  trap cleanup EXIT
+  hdiutil attach -nobrowse -readonly -mountpoint "$MNT" "$DMG" >/dev/null
+  ditto "$MNT/Tether.app" "$TRY/Tether.app"; hdiutil detach "$MNT" >/dev/null
+  HELPER="$TRY/Tether.app/Contents/XPCServices/MTPHelper.xpc"
+  touch "$MARK"; sleep 1
   "$TRY/Tether.app/Contents/MacOS/Tether" -CacheDirectory "$CACHE" >/dev/null 2>&1 & pid=$!
-  ok=0; for _ in $(seq 1 20); do sleep 0.5; pgrep -f "Tether.app/Contents/XPCServices/MTPHelper.xpc" >/dev/null && { ok=1; break; }; done
-  sleep 2
-  kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true
-  after=$(ls ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -c -E "^(Tether|MTPHelper)" || true)
+  ok=0; for _ in $(seq 1 20); do sleep 0.5; pgrep -f "$HELPER" >/dev/null && { ok=1; break; }; done
   [ $ok -eq 1 ] || { echo "smoke: MTPHelper never started" >&2; exit 1; }
-  [ "$after" -le "$before" ] || { echo "smoke: new crash report in ~/Library/Logs/DiagnosticReports" >&2; exit 1; }
+  sleep 3
+  pgrep -f "$HELPER" >/dev/null || { echo "smoke: MTPHelper exited after start" >&2; exit 1; }
+  kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; pid=""
+  sleep 3
+  crashes=$(find ~/Library/Logs/DiagnosticReports -newer "$MARK" \( -name 'MTPHelper*' -o -name 'Tether*' \) 2>/dev/null)
+  [ -z "$crashes" ] || { echo "$crashes" >&2; echo "smoke: new crash report in ~/Library/Logs/DiagnosticReports" >&2; exit 1; }
   echo "smoke: app launched, MTPHelper running, no crash reports"
 fi
