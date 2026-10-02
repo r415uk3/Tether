@@ -44,6 +44,13 @@ final class TetherUITests: XCTestCase {
         XCTAssertTrue(cell("notes.txt").waitForExistence(timeout: 10), "Pixel 9's root folder didn't load")
     }
 
+    func testCheckForUpdatesMenuExists() {
+        launchToRoot()
+        app.menuBars.menuBarItems["Tether"].click()
+        XCTAssertTrue(app.menuItems["Check for Updates…"].exists)
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
     func testEject() {
         launchToRoot()
         app.outlines["sidebar"].buttons["Eject Pixel 9"].click()

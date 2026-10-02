@@ -16,6 +16,8 @@ struct TetherApp: App {
                                             ?? ThumbnailStore.defaultDirectory,
                                         previewDirectory: TetherApp.previewDirectory)
 
+    private let updater = Updater(start: !UserDefaults.standard.bool(forKey: "UseFakeDevices") && Updater.isConfigured)
+
     init() {
         let previews = Self.previewDirectory
         PreviewCache.clear(directory: previews) // willTerminate doesn't fire after a crash or force-quit
@@ -35,10 +37,11 @@ struct TetherApp: App {
         .commands {
             BrowserCommands()
             DiagnosticsCommands(model: model)
+            UpdaterCommands(updater: updater)
         }
 
         Settings {
-            SettingsView()
+            SettingsView(updater: updater)
         }
     }
 
