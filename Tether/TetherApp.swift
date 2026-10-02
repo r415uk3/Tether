@@ -16,7 +16,7 @@ struct TetherApp: App {
                                             ?? ThumbnailStore.defaultDirectory,
                                         previewDirectory: TetherApp.previewDirectory)
 
-    private let updater = Updater(start: !UserDefaults.standard.bool(forKey: "UseFakeDevices"))
+    private let updater = Updater(start: !UserDefaults.standard.bool(forKey: "UseFakeDevices") && Updater.isConfigured)
 
     init() {
         let previews = Self.previewDirectory

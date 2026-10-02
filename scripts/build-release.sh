@@ -65,9 +65,10 @@ echo "built $DMG ($(stat -f %z "$DMG") bytes), version $VERSION ($BUILD)"
 
 if [ $SMOKE -eq 1 ]; then
   # Mount, copy out like a user would, launch in real mode, confirm the helper loads libmtp.
-  MNT=$(mktemp -d); TRY=$(mktemp -d); CACHE=$(mktemp -d); MARK=$(mktemp); pid=""
+  MNT=$(mktemp -d); TRY=$(mktemp -d); CACHE=$(mktemp -d); MARK=$(mktemp); pid=""; HELPER=""
   cleanup() {
     [ -z "$pid" ] || kill "$pid" 2>/dev/null || true
+    [ -z "$HELPER" ] || pkill -f "$HELPER" 2>/dev/null || true
     hdiutil detach "$MNT" >/dev/null 2>&1 || true
     rm -rf "$TRY" "$CACHE" "$MARK" "$MNT"
   }
@@ -76,14 +77,14 @@ if [ $SMOKE -eq 1 ]; then
   ditto "$MNT/Tether.app" "$TRY/Tether.app"; hdiutil detach "$MNT" >/dev/null
   HELPER="$TRY/Tether.app/Contents/XPCServices/MTPHelper.xpc"
   touch "$MARK"; sleep 1
-  "$TRY/Tether.app/Contents/MacOS/Tether" -CacheDirectory "$CACHE" >/dev/null 2>&1 & pid=$!
+  "$TRY/Tether.app/Contents/MacOS/Tether" -CacheDirectory "$CACHE" -SUEnableAutomaticChecks NO >/dev/null 2>&1 & pid=$!
   ok=0; for _ in $(seq 1 20); do sleep 0.5; pgrep -f "$HELPER" >/dev/null && { ok=1; break; }; done
   [ $ok -eq 1 ] || { echo "smoke: MTPHelper never started" >&2; exit 1; }
   sleep 3
   pgrep -f "$HELPER" >/dev/null || { echo "smoke: MTPHelper exited after start" >&2; exit 1; }
   kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; pid=""
   sleep 3
-  crashes=$(find ~/Library/Logs/DiagnosticReports -newer "$MARK" \( -name 'MTPHelper*' -o -name 'Tether*' \) 2>/dev/null)
+  crashes=$(find ~/Library/Logs/DiagnosticReports -newer "$MARK" \( -name 'MTPHelper*' -o -name 'Tether*' \) 2>/dev/null || true)
   [ -z "$crashes" ] || { echo "$crashes" >&2; echo "smoke: new crash report in ~/Library/Logs/DiagnosticReports" >&2; exit 1; }
   echo "smoke: app launched, MTPHelper running, no crash reports"
 fi

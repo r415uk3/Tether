@@ -33,11 +33,11 @@ Updates are built in: Tether checks GitHub for new versions. You can turn this o
 
 ## Privacy
 
-Tether has no analytics or telemetry. The only network requests are update checks to `r415uk3.github.io` and downloads from `github.com`. Diagnostics stay local until you copy them.
+Tether has no analytics or telemetry. The only network requests are update checks to `r415uk3.github.io` and update downloads from `github.com` (including GitHub's download hosts). Diagnostics stay local until you copy them.
 
 ## Build from source
 
-Requirements: Xcode 27+, Homebrew.
+Requirements: Xcode 26 or later (macOS 26 SDK), Homebrew.
 
 ```bash
 brew install xcodegen

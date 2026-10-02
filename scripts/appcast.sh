@@ -13,7 +13,7 @@ ITEM="    <item>
       <sparkle:version>$BUILD</sparkle:version>
       <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://github.com/r415uk3/Tether/releases/tag/v$VERSION</sparkle:releaseNotesLink>
+      <sparkle:fullReleaseNotesLink>https://github.com/r415uk3/Tether/releases/tag/v$VERSION</sparkle:fullReleaseNotesLink>
       <enclosure url=\"$URL\" length=\"$LEN\" type=\"application/octet-stream\" sparkle:edSignature=\"$SIG\"/>
     </item>"
 if [ ! -f "$FEED" ]; then

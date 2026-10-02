@@ -31,7 +31,7 @@
 - There is no Apple Developer Program membership, so the app ships **unsigned (ad-hoc)** with no notarization. This deviates from spec §7 "sign, notarize". The release workflow keeps a clearly marked, disabled hook for Developer ID signing and notarization.
 - The repo becomes **public**. Releases go on GitHub Releases, and the appcast goes on GitHub Pages (`https://r415uk3.github.io/Tether/appcast.xml`).
 - The first version is **1.0.0**.
-- Rewrite history author emails from `yergali07@gmail.com` to `119946977+r415uk3@users.noreply.github.com` before going public. The local repo config already uses the noreply identity.
+- Rewrite history author emails from the maintainer's old personal email to `119946977+r415uk3@users.noreply.github.com` before going public. The local repo config already uses the noreply identity.
 - Use a generated placeholder app icon.
 
 ## Global Constraints
@@ -719,15 +719,20 @@ The maintainer runs `generate_keys` in Terminal. The controller puts the public 
 
 1. Confirm there are no open PRs or branches besides `main` (`gh pr list`, `git ls-remote --heads origin`).
 2. Make a backup: `git clone --mirror https://github.com/r415uk3/Tether.git ~/Tether-backup-$(date +%Y%m%d).git`.
-3. Rewrite in a fresh clone, then force-push `main`:
+3. Rewrite in a fresh clone, then force-push `main`. The old address is supplied at run time and is never stored in the repo:
    ```
    brew install git-filter-repo
+   OLD_EMAIL='<the old personal email>'   # the maintainer sets this in their shell
    git clone https://github.com/r415uk3/Tether.git /tmp/tether-rewrite && cd /tmp/tether-rewrite
-   printf '%s\n' 'r415uk3 <119946977+r415uk3@users.noreply.github.com> <yergali07@gmail.com>' > /tmp/mailmap
-   git filter-repo --mailmap /tmp/mailmap
+   TMP=$(mktemp -d)
+   printf '%s\n' "r415uk3 <119946977+r415uk3@users.noreply.github.com> <${OLD_EMAIL}>" > "$TMP/mailmap"
+   printf '%s\n' "${OLD_EMAIL}==><redacted>" > "$TMP/replacements"
+   git filter-repo --mailmap "$TMP/mailmap" --replace-text "$TMP/replacements"
+   rm -rf "$TMP"
    git log --format='%ae %ce' | sort -u
+   git log --all -p | grep -c -- "$OLD_EMAIL"
    ```
-   Expected: only noreply addresses, plus `noreply@github.com` for GitHub-made merge commits.
+   Expected: only noreply addresses, plus `noreply@github.com` for GitHub-made merge commits, and the last command prints `0`. Do not push if it prints anything else.
    ```
    git remote add origin https://github.com/r415uk3/Tether.git
    git push --force origin main
@@ -740,7 +745,14 @@ Old commit SHAs remain reachable through the merged PR pages on GitHub (`refs/pu
 - [ ] **Step 3: Make the repo public and enable Pages (maintainer go-ahead)**
 
 1. Run `gh repo edit r415uk3/Tether --visibility public --accept-visibility-change-consequences`.
-2. Create an orphan `gh-pages` branch holding only `.nojekyll` and an `index.html` that links to Releases. Push it.
+2. Create an orphan `gh-pages` branch holding only `.nojekyll` and an `index.html` that links to Releases, in a separate worktree. Push it.
+   ```
+   git worktree add --detach /tmp/pages && cd /tmp/pages && git switch --orphan gh-pages
+   touch .nojekyll
+   # write index.html linking to Releases
+   git add . && git commit -m "pages" && git push origin gh-pages
+   cd - && git worktree remove /tmp/pages
+   ```
 3. Enable Pages from `gh-pages` / root: `gh api -X POST repos/r415uk3/Tether/pages -f "source[branch]=gh-pages" -f "source[path]=/"`.
 4. Check that `https://r415uk3.github.io/Tether/` serves.
 
