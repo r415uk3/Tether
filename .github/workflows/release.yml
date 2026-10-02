@@ -4,6 +4,10 @@ on:
     tags: ['v*']
 permissions:
   contents: write
+concurrency: { group: release, cancel-in-progress: false }
+defaults:
+  run:
+    shell: bash
 jobs:
   release:
     runs-on: macos-26
@@ -12,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - name: Select newest Xcode
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | grep -viE 'beta|release_candidate|rc' | sort -V | tail -1)"
       - run: brew install xcodegen
       - uses: actions/cache@v4
         with:
@@ -23,7 +27,7 @@ jobs:
         run: |
           V="${GITHUB_REF_NAME#v}"
           [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "tag must be vX.Y.Z" >&2; exit 1; }
-          grep -q "MARKETING_VERSION: \"$V\"" project.yml || { echo "project.yml MARKETING_VERSION != $V" >&2; exit 1; }
+          grep -qF "MARKETING_VERSION: \"$V\"" project.yml || { echo "project.yml MARKETING_VERSION != $V" >&2; exit 1; }
           echo "VERSION=$V" >> "$GITHUB_ENV"
           echo "BUILD=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
       - name: Script tests
@@ -46,21 +50,28 @@ jobs:
           SIG=$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN" --ed-key-file - -p "dist/Tether-$VERSION.dmg")
           [ -n "$SIG" ] || { echo "empty signature" >&2; exit 1; }
           echo "EDSIG=$SIG" >> "$GITHUB_ENV"
+      - name: Prepare appcast on gh-pages
+        run: |
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Tether-${VERSION}.dmg"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages:gh-pages
+            git worktree add ../pages gh-pages
+          else
+            git worktree add --detach ../pages
+            git -C ../pages switch --orphan gh-pages
+          fi
+          # Fails here (before anything is published) if the build number is refused.
+          scripts/appcast.sh "dist/Tether-$VERSION.dmg" "$VERSION" "$BUILD" "$URL" "$EDSIG" ../pages/appcast.xml
       - name: GitHub Release
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           gh release create "$GITHUB_REF_NAME" "dist/Tether-$VERSION.dmg" \
             --title "Tether $VERSION" --generate-notes
-      - name: Update appcast on gh-pages
-        env: { GH_TOKEN: "${{ github.token }}" }
+      - name: Publish appcast
         run: |
-          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Tether-${VERSION}.dmg"
-          git fetch origin gh-pages:gh-pages || git branch gh-pages
-          git worktree add ../pages gh-pages
-          scripts/appcast.sh "dist/Tether-$VERSION.dmg" "$VERSION" "$BUILD" "$URL" "$EDSIG" ../pages/appcast.xml
           cd ../pages
           touch .nojekyll
           git add appcast.xml .nojekyll
           git -c user.name="github-actions" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -m "appcast: Tether $VERSION"
-          git push origin gh-pages
+          git push origin HEAD:gh-pages
