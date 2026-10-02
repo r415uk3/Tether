@@ -195,15 +195,17 @@ struct FileTableView: NSViewRepresentable {
             func less(_ a: FileEntry, _ b: FileEntry) -> Bool {
                 switch key {
                 case Column.kind.rawValue:
-                    kinds[a.objectID] != kinds[b.objectID]
-                        ? (kinds[a.objectID] ?? "").localizedStandardCompare(kinds[b.objectID] ?? "") == .orderedAscending
+                    // Different strings can still compare equal (e.g. by case); fall back to the name then too.
+                    let c = (kinds[a.objectID] ?? "").localizedStandardCompare(kinds[b.objectID] ?? "")
+                    return c != .orderedSame
+                        ? c == .orderedAscending
                         : a.name.localizedStandardCompare(b.name) == .orderedAscending
                 case Column.size.rawValue:
-                    a.size != b.size ? a.size < b.size : a.name.localizedStandardCompare(b.name) == .orderedAscending
+                    return a.size != b.size ? a.size < b.size : a.name.localizedStandardCompare(b.name) == .orderedAscending
                 case Column.modified.rawValue:
-                    (a.modified ?? .distantPast) < (b.modified ?? .distantPast)
+                    return (a.modified ?? .distantPast) < (b.modified ?? .distantPast)
                 default:
-                    a.name.localizedStandardCompare(b.name) == .orderedAscending
+                    return a.name.localizedStandardCompare(b.name) == .orderedAscending
                 }
             }
             rows = source.sorted { a, b in

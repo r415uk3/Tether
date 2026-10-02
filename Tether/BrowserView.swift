@@ -154,8 +154,9 @@ struct BrowserView: View {
             } actions: {
                 Button("Try Again", action: refresh)
             }
-        } else if visibleEntries.isEmpty && !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+        } else if visibleEntries.isEmpty && EntryFilter.isSearching(searchText) {
             ContentUnavailableView.search(text: searchText)
+                .allowsHitTesting(false) // drops still reach the table underneath
         } else if visibleEntries.isEmpty {
             ContentUnavailableView("Empty Folder", systemImage: "folder",
                                    description: Text("Drop files here to copy them to the phone."))
@@ -201,8 +202,10 @@ struct BrowserView: View {
         let newFolderAction: (() -> Void)? = editing ? nil : { newFolder() }
         let showIconsAction: (() -> Void)? = editing ? nil : { viewMode = .icons }
         let showListAction: (() -> Void)? = editing ? nil : { viewMode = .list }
-        let ejectAction: (() -> Void)? = editing || model.devices.ejecting.contains(selection.deviceID) ? nil : { requestEject() }
-        let findAction: (() -> Void)? = { searchFocused = true }
+        // ⌘E is also the system's "Use Selection for Find": typing in the search field must never eject the phone.
+        let ejectAction: (() -> Void)? = editing || searchFocused || model.devices.ejecting.contains(selection.deviceID)
+            ? nil : { requestEject() }
+        let findAction: (() -> Void)? = editing ? nil : { searchFocused = true }
         return BrowserActions(
             newFolder: newFolderAction, refresh: refresh, goBack: goBackAction, goForward: goForwardAction, goUp: goUpAction, open: openAction,
             download: downloadAction, rename: renameAction, delete: deleteAction, eject: ejectAction, find: findAction,
@@ -237,11 +240,14 @@ struct BrowserView: View {
     @ViewBuilder private var pathMenu: some View {
         if let storageName = model.devices.storage(for: folder)?.name {
             Button { history.visit([]) } label: { Text(verbatim: storageName) }
+                .disabled(isEditingName)
         } else {
             Button("Phone") { history.visit([]) }
+                .disabled(isEditingName)
         }
         ForEach(Array(path.dropLast().enumerated()), id: \.offset) { index, entry in
             Button { history.visit(Array(path.prefix(index + 1))) } label: { Text(verbatim: entry.name) }
+                .disabled(isEditingName) // navigating away mid-rename would discard the typed name
         }
     }
 
@@ -272,6 +278,8 @@ struct BrowserView: View {
     }
 
     private func newFolder() {
+        // A search would hide the new folder and defer its inline rename until the search is cleared.
+        searchText = ""
         let name = NameValidation.newFolderName(siblings: allEntries)
         let folder = self.folder
         Task {

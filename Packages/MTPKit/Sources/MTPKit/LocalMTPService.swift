@@ -218,9 +218,14 @@ public actor LocalMTPService: MTPService {
     }
 
     public func download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, into directory: URL) async throws -> URL {
-        let reporter = ProgressReporter(jobID: jobID, registry: cancellations, handler: eventHandler)
-        defer { cancellations.clear(jobID) }
-        return try await worker(deviceID, scanning: true).perform(.transfer) { device in
+        let worker: DeviceWorker
+        do { worker = try await self.worker(deviceID, scanning: true) } catch { cancellations.clear(jobID); throw error }
+        let reporter = ProgressReporter(jobID: jobID, registry: cancellations, handler: eventHandler,
+                                        isStopping: { worker.isStopping })
+        let cancellations = self.cancellations
+        // Cleared only when the device call has really ended: an eject fails this call while the worker is still
+        // running the transfer, and a cancel arriving around then must still stop it.
+        return try await worker.perform(.transfer, onEnd: { cancellations.clear(jobID) }) { device in
             try reporter.checkCancelled()
             return try Transfers.download(entry, from: device, into: directory) { reporter.report(done: $0, total: $1) }
         }
@@ -228,11 +233,19 @@ public actor LocalMTPService: MTPService {
 
     public func upload(jobID: UUID, fileURL: URL, to folder: FolderRef,
                        conflict: ConflictResolution) async throws -> FileEntry {
-        let reporter = ProgressReporter(jobID: jobID, registry: cancellations, handler: eventHandler)
-        defer { cancellations.clear(jobID) }
-        let worker = try await worker(folder.deviceID, scanning: true)
-        try checkSession(folder)
-        return try await worker.perform(.transfer) { device in
+        let worker: DeviceWorker
+        do {
+            worker = try await self.worker(folder.deviceID, scanning: true)
+            try checkSession(folder)
+        } catch {
+            cancellations.clear(jobID)
+            throw error
+        }
+        let reporter = ProgressReporter(jobID: jobID, registry: cancellations, handler: eventHandler,
+                                        isStopping: { worker.isStopping })
+        let cancellations = self.cancellations
+        // See `download`: cleared only after the device call has really ended.
+        return try await worker.perform(.transfer, onEnd: { cancellations.clear(jobID) }) { device in
             try reporter.checkCancelled()
             return try Transfers.upload(fileURL, to: device, storageID: folder.storageID, parentID: folder.folderID,
                                         conflict: conflict) {
@@ -291,17 +304,23 @@ final class ProgressReporter: @unchecked Sendable {
     private let jobID: UUID
     private let registry: CancellationRegistry
     private let handler: (@Sendable (ServiceEvent) -> Void)?
+    /// True once the job's worker is shutting down (eject, unplug, restart): the caller has already been failed.
+    private let isStopping: @Sendable () -> Bool
     private var lastEmit: UInt64 = 0
     private static let interval: UInt64 = 100_000_000 // 10 updates per second
 
-    init(jobID: UUID, registry: CancellationRegistry, handler: (@Sendable (ServiceEvent) -> Void)?) {
+    init(jobID: UUID, registry: CancellationRegistry, handler: (@Sendable (ServiceEvent) -> Void)?,
+         isStopping: @escaping @Sendable () -> Bool = { false }) {
         self.jobID = jobID
         self.registry = registry
         self.handler = handler
+        self.isStopping = isStopping
     }
 
+    private var shouldStop: Bool { registry.isCancelled(jobID) || isStopping() }
+
     func checkCancelled() throws {
-        if registry.isCancelled(jobID) { throw MTPError.cancelled }
+        if shouldStop { throw MTPError.cancelled }
     }
 
     func report(done: UInt64, total: UInt64) -> Bool {
@@ -310,6 +329,6 @@ final class ProgressReporter: @unchecked Sendable {
             lastEmit = now
             handler?(.progress(jobID: jobID, done: done, total: total))
         }
-        return !registry.isCancelled(jobID)
+        return !shouldStop
     }
 }

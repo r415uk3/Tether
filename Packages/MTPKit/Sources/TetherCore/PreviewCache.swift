@@ -42,14 +42,23 @@ public final class PreviewCache {
 
     /// Cancels every preview download in flight (Quick Look closed or moved on); finished files stay cached.
     public func cancelAll() {
+        cancel { _ in true }
+    }
+
+    /// Cancels only `deviceID`'s preview downloads (that phone is being ejected); other phones' keep going.
+    public func cancelAll(deviceID: DeviceID) {
+        cancel { $0.deviceID == deviceID }
+    }
+
+    private func cancel(where matches: (InFlight) -> Bool) {
         let service = self.service
-        for running in inFlight.values {
+        for (key, running) in inFlight where matches(running) {
             let jobID = running.jobID
             Task { await service.cancel(jobID: jobID) }
+            inFlight[key] = nil
+            fractions[jobID] = nil
+            if newestJob == jobID { newestJob = nil }
         }
-        inFlight.removeAll()
-        fractions.removeAll()
-        newestJob = nil
         refreshProgress()
     }
 
