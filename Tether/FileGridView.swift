@@ -148,6 +148,7 @@ struct FileGridView: NSViewRepresentable {
 
         private func updateHighlight() {
             let on = isSelected || highlightState == .forSelection
+            view.setAccessibilitySelected(on)
             view.layer?.cornerRadius = 8
             view.layer?.backgroundColor = on
                 ? NSColor.selectedContentBackgroundColor.withAlphaComponent(0.3).cgColor : nil
@@ -335,6 +336,8 @@ struct FileGridView: NSViewRepresentable {
         private func item(_ title: String, _ action: Selector) -> NSMenuItem {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = self
+            // Stable identifier ("download", "rename", …) so UI tests don't depend on selector names.
+            item.identifier = NSUserInterfaceItemIdentifier(NSStringFromSelector(action).replacingOccurrences(of: "FromMenu", with: ""))
             return item
         }
 

@@ -14,6 +14,14 @@ public enum MTPError: Error, Codable, Hashable, Sendable {
     case phoneReconnected
     case underlying(code: Int, message: String)
 
+    /// `.underlying` code ranges:
+    /// - -1...-7: helper/Tether-internal (-1 out of memory/unknown, -2 unexpected response, -3 bad upload path,
+    ///   -4...-6 already-localized Tether messages, -7 couldn't open the device).
+    /// - -101 and below: a libmtp error number N, as `libmtpCode(N)` (= -100 - N). Raw libmtp text is English,
+    ///   so these get the generic friendly message; the number stays visible in `logDescription`.
+    /// - 0 and above: NSError-style codes whose localized message is passed through.
+    public static func libmtpCode(_ raw: Int) -> Int { -100 - raw }
+
     public static let unexpectedResponse = MTPError.underlying(code: -2, message: "Unexpected response from MTPHelper.")
 
     public static func from(_ error: Error) -> MTPError {

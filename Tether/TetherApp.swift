@@ -5,7 +5,8 @@ import TetherCore
 @main
 struct TetherApp: App {
     /// `-CacheDirectory <path>` (UI tests) keeps thumbnails and previews out of the real Caches folder.
-    private static let cacheRoot: URL? = UserDefaults.standard.string(forKey: "CacheDirectory").map(URL.init(fileURLWithPath:))
+    private static let cacheRoot: URL? = UserDefaults.standard.string(forKey: "CacheDirectory")
+        .flatMap { $0.hasPrefix("/") ? URL(fileURLWithPath: $0) : nil } // empty or relative values fall back to the defaults
     private static var previewDirectory: URL {
         cacheRoot?.appending(path: "Previews") ?? PreviewCache.defaultDirectory
     }

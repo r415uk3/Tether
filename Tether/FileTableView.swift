@@ -250,6 +250,8 @@ struct FileTableView: NSViewRepresentable {
                 cell.textField?.stringValue = entry.name
                 cell.setAccessibilityLabel(AccessibilityText.file(entry))
                 cell.setAccessibilityIdentifier(entry.name)
+                // The table's AX cell proxy doesn't forward the identifier, so the name text carries it too (UI tests).
+                cell.textField?.setAccessibilityIdentifier(entry.name)
                 cell.imageView?.image = icon(for: entry)
             case .size:
                 cell.textField?.stringValue = entry.isFolder
@@ -386,6 +388,8 @@ struct FileTableView: NSViewRepresentable {
         private func item(_ title: String, _ action: Selector) -> NSMenuItem {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = self
+            // Stable identifier ("download", "rename", …) so UI tests don't depend on selector names.
+            item.identifier = NSUserInterfaceItemIdentifier(NSStringFromSelector(action).replacingOccurrences(of: "FromMenu", with: ""))
             return item
         }
 
