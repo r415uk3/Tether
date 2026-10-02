@@ -4,7 +4,13 @@
 
 Tether is a native macOS app for moving files between your Mac and an Android phone over USB (MTP). It is a free, open-source replacement for Android File Transfer, built with SwiftUI and AppKit for macOS 15 and later.
 
-*Screenshot: coming soon.*
+![Tether browsing a Pixel 9's Camera folder in light mode](docs/images/browser-light.png)
+
+## Screenshots
+
+![Tether in dark mode with the icon view](docs/images/browser-dark.png)
+
+![Tether with the Russian interface](docs/images/browser-russian.png)
 
 ## Features
 
