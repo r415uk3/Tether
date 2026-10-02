@@ -39,7 +39,6 @@ public final class AppModel {
         }
     }
 
-    /// How long the window waits for the first device list before showing the no-phone guide.
     public func activeTransferCount(for deviceID: DeviceID) -> Int {
         transfers.jobs.filter { $0.isActive && $0.deviceID == deviceID }.count
     }
@@ -47,16 +46,12 @@ public final class AppModel {
     /// Stops this phone's transfers and previews, then ejects it.
     public func eject(_ deviceID: DeviceID) async -> MTPError? {
         transfers.cancelAll(deviceID: deviceID)
-        // A running job stops on its next progress callback; give it a moment so it ends as cancelled, not disconnected.
-        let deadline = ContinuousClock.now + .seconds(2)
-        while activeTransferCount(for: deviceID) > 0 && ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
         // Cancels every preview download, not just this phone's: only one Quick Look panel exists.
         previews.cancelAll()
         return await devices.eject(deviceID)
     }
 
+    /// How long the window waits for the first device list before showing the no-phone guide.
     public var initialLoadTimeout: Duration = .seconds(10)
 
     public func start() async {

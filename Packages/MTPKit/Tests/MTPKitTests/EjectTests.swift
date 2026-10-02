@@ -52,12 +52,27 @@ import Testing
         provider.holdOpens("p1")
         let service = LocalMTPService(provider: provider)
         let scan = Task { _ = try await service.devices() }
-        try await Task.sleep(for: .milliseconds(50))
+        try await eventually { provider.openCount("p1") == 1 }
         try await service.ejectDevice("p1")
         provider.releaseOpens("p1")
         _ = await scan.result
         #expect(try await service.devices().isEmpty)
         #expect(phone.isClosed, "the handle opened during the eject must be closed")
+    }
+
+    @Test func ejectingAPhoneTheFirstScanHasNotReachedHidesIt() async throws {
+        let provider = FakeDeviceProvider()
+        provider.attach(makePhone("p1"))
+        provider.attach(makePhone("p2"))
+        provider.holdOpens("p1")
+        let service = LocalMTPService(provider: provider)
+        let scan = Task { _ = try await service.devices() }
+        try await eventually { provider.openCount("p1") == 1 }
+        try await service.ejectDevice("p2") // not reached yet: the scan is stuck on p1
+        provider.releaseOpens("p1")
+        _ = await scan.result
+        #expect(try await service.devices().map(\.id) == ["p1"])
+        #expect(provider.openCount("p2") == 0)
     }
 
     @Test func ejectingAnUnknownPhoneFails() async throws {

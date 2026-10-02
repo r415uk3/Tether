@@ -89,6 +89,10 @@ public final class TransferQueue {
         for job in jobs where job.isActive && job.deviceID == deviceID { cancel(job.id) }
     }
 
+    /// Attempts the user asked to stop. Whatever error ends one of them (e.g. the phone was ejected underneath it)
+    /// counts as a cancellation, not as a failure to retry.
+    private var cancelRequested: Set<UUID> = []
+
     public func cancel(_ id: UUID) {
         guard let i = index(id) else { return }
         switch jobs[i].state {
@@ -96,6 +100,7 @@ public final class TransferQueue {
             finish(i, .cancelled)
         case .running:
             let attempt = jobs[i].attempt
+            cancelRequested.insert(attempt)
             Task { await service.cancel(jobID: attempt) }
         default:
             break
@@ -108,6 +113,7 @@ public final class TransferQueue {
         case .failed, .cancelled:
             jobs[i].state = .queued
             jobs[i].done = 0
+            cancelRequested.remove(jobs[i].attempt)
             jobs[i].attempt = UUID()
             pump()
         default:
@@ -205,9 +211,11 @@ public final class TransferQueue {
         } catch {
             result = .failure(MTPError.from(error))
         }
+        let wasCancelled = cancelRequested.remove(job.attempt) != nil
         guard let i = index(job.id), jobs[i].attempt == job.attempt else { return }
         switch result {
         case .success(let url): finish(i, .finished(url))
+        case .failure where wasCancelled: finish(i, .cancelled)
         case .failure(.cancelled): finish(i, .cancelled)
         case .failure(let error): finish(i, .failed(error))
         }
