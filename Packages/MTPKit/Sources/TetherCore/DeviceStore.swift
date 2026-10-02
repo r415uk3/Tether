@@ -18,6 +18,8 @@ public final class DeviceStore {
     public private(set) var releaseErrors: [DeviceID: MTPError] = [:]
     /// Phones with a Release in flight; a second request for the same phone is ignored.
     public private(set) var releasing: Set<DeviceID> = []
+    /// Phones with an eject in flight; their eject controls are disabled.
+    public private(set) var ejecting: Set<DeviceID> = []
     public private(set) var listings: [FolderRef: Listing] = [:]
     public private(set) var hasLoaded = false
     public var listTimeout: Duration = .seconds(15)
@@ -60,6 +62,8 @@ public final class DeviceStore {
 
     /// Closes Tether's connection to the phone; it disappears from the list until it is unplugged and plugged in again.
     public func eject(_ id: DeviceID) async -> MTPError? {
+        guard ejecting.insert(id).inserted else { return nil }
+        defer { ejecting.remove(id) }
         var failure: MTPError?
         do { try await service.ejectDevice(id) } catch { failure = MTPError.from(error) }
         await reloadDevices()

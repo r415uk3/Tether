@@ -52,17 +52,20 @@ private struct EjectButton: View {
     @Environment(AppModel.self) private var model
     let device: DeviceInfo
     @State private var confirming = false
+    @State private var pendingCount = 0
 
     var body: some View {
         Button {
-            if model.activeTransferCount(for: device.id) > 0 { confirming = true } else { eject() }
+            let count = model.activeTransferCount(for: device.id)
+            if count > 0 { pendingCount = count; confirming = true } else { eject() }
         } label: {
             Image(systemName: "eject")
         }
         .buttonStyle(.borderless)
         .help(String(localized: "Eject \(device.displayName)"))
         .accessibilityLabel(String(localized: "Eject \(device.displayName)"))
-        .ejectConfirmation(for: device, isPresented: $confirming)
+        .disabled(model.devices.ejecting.contains(device.id))
+        .ejectConfirmation(for: device, transferCount: pendingCount, isPresented: $confirming)
     }
 
     private func eject() { Task { _ = await model.eject(device.id) } }
@@ -70,21 +73,23 @@ private struct EjectButton: View {
 
 extension View {
     /// Asks before ejecting a phone that still has transfers running; shared by the sidebar and the browser.
-    func ejectConfirmation(for device: DeviceInfo, isPresented: Binding<Bool>) -> some View {
-        modifier(EjectConfirmation(device: device, isPresented: isPresented))
+    /// `transferCount` is the count when the dialog was requested, so the message doesn't change underneath it.
+    func ejectConfirmation(for device: DeviceInfo, transferCount: Int, isPresented: Binding<Bool>) -> some View {
+        modifier(EjectConfirmation(device: device, transferCount: transferCount, isPresented: isPresented))
     }
 }
 
 private struct EjectConfirmation: ViewModifier {
     @Environment(AppModel.self) private var model
     let device: DeviceInfo
+    let transferCount: Int
     @Binding var isPresented: Bool
 
     func body(content: Content) -> some View {
         content.confirmationDialog(String(localized: "Eject “\(device.displayName)”?"), isPresented: $isPresented) {
             Button("Eject", role: .destructive) { Task { _ = await model.eject(device.id) } }
         } message: {
-            Text("\(model.activeTransferCount(for: device.id)) transfers will stop.")
+            Text("\(transferCount) transfers will stop.")
         }
     }
 }

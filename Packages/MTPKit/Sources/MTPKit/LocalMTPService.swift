@@ -125,7 +125,7 @@ public actor LocalMTPService: MTPService {
         // Don't join a first scan that is still opening phones: an eject must be able to cancel that very open.
         if firstScan == nil { await ensureScanned() }
         let key = key(for: deviceID)
-        guard infos[key] != nil || opening[key] != nil else { throw MTPError.deviceDisconnected }
+        guard infos[key] != nil || opening[key] != nil || lastAttached.contains(key) else { throw MTPError.deviceDisconnected }
         ejected.insert(key)
         workers.removeValue(forKey: key)?.shutdown(reason: .deviceDisconnected)
         infos[key] = nil

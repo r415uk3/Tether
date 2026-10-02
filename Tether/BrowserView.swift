@@ -18,6 +18,7 @@ struct BrowserView: View {
     @State private var pendingDeleteFolder: FolderRef?
     @State private var problem: String?
     @State private var confirmingEject = false
+    @State private var ejectTransferCount = 0
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
     @AppStorage(SettingsKey.viewMode) private var viewMode = BrowserViewMode.list
     @State private var renamingEntry: FileEntry?
@@ -111,7 +112,7 @@ struct BrowserView: View {
             } message: {
                 Text("This can’t be undone.")
             }
-            .modifier(EjectDialog(deviceID: selection.deviceID, isPresented: $confirmingEject))
+            .modifier(EjectDialog(deviceID: selection.deviceID, transferCount: ejectTransferCount, isPresented: $confirmingEject))
             .alert(String(localized: "The Operation Couldn’t Be Completed"), isPresented: isShowingProblem) {
                 Button(String(localized: "OK")) {}
             } message: {
@@ -180,7 +181,7 @@ struct BrowserView: View {
         let newFolderAction: (() -> Void)? = editing ? nil : { newFolder() }
         let showIconsAction: (() -> Void)? = editing ? nil : { viewMode = .icons }
         let showListAction: (() -> Void)? = editing ? nil : { viewMode = .list }
-        let ejectAction: (() -> Void)? = editing ? nil : { requestEject() }
+        let ejectAction: (() -> Void)? = editing || model.devices.ejecting.contains(selection.deviceID) ? nil : { requestEject() }
         return BrowserActions(
             newFolder: newFolderAction, refresh: refresh, goUp: goUpAction, open: openAction,
             download: downloadAction, rename: renameAction, delete: deleteAction, eject: ejectAction,
@@ -200,7 +201,8 @@ struct BrowserView: View {
 
     private func requestEject() {
         let id = selection.deviceID
-        if model.activeTransferCount(for: id) > 0 { confirmingEject = true } else { Task { _ = await model.eject(id) } }
+        let count = model.activeTransferCount(for: id)
+        if count > 0 { ejectTransferCount = count; confirmingEject = true } else { Task { _ = await model.eject(id) } }
     }
 
     private func goUp() {
@@ -348,11 +350,12 @@ struct BrowserView: View {
 private struct EjectDialog: ViewModifier {
     @Environment(AppModel.self) private var model
     let deviceID: DeviceID
+    let transferCount: Int
     @Binding var isPresented: Bool
 
     func body(content: Content) -> some View {
         if let device = model.devices.devices.first(where: { $0.id == deviceID }) {
-            content.ejectConfirmation(for: device, isPresented: $isPresented)
+            content.ejectConfirmation(for: device, transferCount: transferCount, isPresented: $isPresented)
         } else {
             content
         }

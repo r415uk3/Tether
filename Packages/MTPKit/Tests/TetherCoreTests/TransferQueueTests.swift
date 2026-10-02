@@ -15,6 +15,19 @@ import MTPKit
         return (TransferQueue(service: service), service)
     }
 
+    @Test func aCancelledJobThatFailsOtherwiseStaysCancelled() async throws {
+        let gated = GatedFailService()
+        let queue = TransferQueue(service: gated)
+        let file = device.addFile("a.bin", data: Data(count: 10))
+        let id = queue.enqueueDownload(file, deviceID: "p1", into: try makeTempDirectory())
+        try await eventually { gated.started }
+        queue.cancel(id)
+        gated.failWithDisconnect() // the phone went away underneath the cancelled job
+        try await eventually { queue.jobs.first?.isActive == false }
+        #expect(queue.jobs.first?.state == .cancelled)
+        #expect(queue.jobs.first?.canRetry == true)
+    }
+
     @Test func downloadFinishesAndCallsCompletion() async throws {
         let file = device.addFile("a.txt", data: Data("hello".utf8))
         let (queue, _) = try await makeQueue()
@@ -275,4 +288,52 @@ import MTPKit
         #expect(finished[0].state == .finished(nil))
         #expect(device.children(of: FileEntry.rootID).map(\.name) == ["up.txt"])
     }
+}
+
+/// Download blocks until `failWithDisconnect()`, then throws `.deviceDisconnected`; everything else is unused.
+private final class GatedFailService: MTPService, @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var _started = false
+    private var released = false
+    var started: Bool { lock.withLock { _started } }
+
+    func failWithDisconnect() {
+        let c = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            released = true
+            defer { continuation = nil }
+            return continuation
+        }
+        c?.resume()
+    }
+
+    func download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, into directory: URL) async throws -> URL {
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            let resumeNow = lock.withLock { () -> Bool in
+                _started = true
+                if released { return true }
+                continuation = c
+                return false
+            }
+            if resumeNow { c.resume() }
+        }
+        throw MTPError.deviceDisconnected
+    }
+
+    func setEventHandler(_ handler: @escaping @Sendable (ServiceEvent) -> Void) async {}
+    func devices() async throws -> [DeviceInfo] { [] }
+    func storages(deviceID: DeviceID) async throws -> [StorageInfo] { [] }
+    func releaseDevice(_ deviceID: DeviceID) async throws {}
+    func ejectDevice(_ deviceID: DeviceID) async throws {}
+    func diagnostics() async throws -> [String] { [] }
+    func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? { nil }
+    func list(_ folder: FolderRef) async throws -> [FileEntry] { [] }
+    func upload(jobID: UUID, fileURL: URL, to folder: FolderRef, conflict: ConflictResolution) async throws -> FileEntry {
+        throw MTPError.deviceDisconnected
+    }
+    func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry { throw MTPError.deviceDisconnected }
+    func rename(_ entry: FileEntry, in folder: FolderRef, to newName: String) async throws {}
+    func delete(_ entry: FileEntry, in folder: FolderRef) async throws {}
+    func cancel(jobID: UUID) async {}
+    func restart() async {}
 }
