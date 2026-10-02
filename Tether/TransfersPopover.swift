@@ -12,6 +12,8 @@ struct TransfersButton: View {
         } label: {
             Label("Transfers", systemImage: model.transfers.hasActiveJobs ? "arrow.down.circle.dotted" : "arrow.down.circle")
         }
+        .accessibilityValue(model.transfers.hasActiveJobs ? Text("In progress") : Text(verbatim: ""))
+        .accessibilityIdentifier("transfersButton")
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             TransfersList()
                 .environment(model)
@@ -74,24 +76,30 @@ private struct TransferRow: View {
                     Text(error.localizedDescription).font(.caption).foregroundStyle(.red)
                 }
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(AccessibilityText.transfer(job))
             Spacer()
             switch job.state {
             case .queued, .running:
                 Button("Cancel", systemImage: "xmark.circle.fill") { model.transfers.cancel(job.id) }
                     .labelStyle(.iconOnly).buttonStyle(.borderless)
+                    .accessibilityLabel(String(localized: "Cancel \(job.name)"))
             case .failed, .cancelled:
                 if job.canRetry {
                     Button("Retry", systemImage: "arrow.clockwise") { model.transfers.retry(job.id) }
                         .labelStyle(.iconOnly).buttonStyle(.borderless)
+                        .accessibilityLabel(String(localized: "Retry \(job.name)"))
                 }
             case .finished(let url?):
                 Button("Show in Finder", systemImage: "magnifyingglass") {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
                 .labelStyle(.iconOnly).buttonStyle(.borderless)
+                .accessibilityLabel(String(localized: "Show \(job.name) in Finder"))
             case .finished(nil):
                 EmptyView()
             }
         }
+        .accessibilityElement(children: .contain)
     }
 }

@@ -3,6 +3,7 @@ import Quartz
 import SwiftUI
 import UniformTypeIdentifiers
 import MTPKit
+import TetherCore
 
 /// Finder-style icon view backed by NSCollectionView, sharing the list's actions.
 struct FileGridView: NSViewRepresentable {
@@ -25,6 +26,7 @@ struct FileGridView: NSViewRepresentable {
         layout.sectionInset = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
 
         let grid = FileGrid()
+        grid.setAccessibilityIdentifier("fileGrid")
         grid.collectionViewLayout = layout
         grid.isSelectable = true
         grid.allowsMultipleSelection = true
@@ -94,8 +96,12 @@ struct FileGridView: NSViewRepresentable {
         }
 
         override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
-        override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) { QuickLookController.shared.attach(panel, from: self) }
-        override func endPreviewPanelControl(_ panel: QLPreviewPanel!) { QuickLookController.shared.detach(panel, from: self) }
+        override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+            MainActor.assumeIsolated { QuickLookController.shared.attach(panel, from: self) }
+        }
+        override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+            MainActor.assumeIsolated { QuickLookController.shared.detach(panel, from: self) }
+        }
     }
 
     final class FileGridItem: NSCollectionViewItem {
@@ -128,6 +134,10 @@ struct FileGridView: NSViewRepresentable {
                 label.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 2),
                 label.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -2),
             ])
+            root.setAccessibilityElement(true)
+            root.setAccessibilityRole(.cell)
+            image.setAccessibilityElement(false)
+            label.setAccessibilityElement(false)
             view = root
             imageView = image
             textField = label
@@ -138,6 +148,7 @@ struct FileGridView: NSViewRepresentable {
 
         private func updateHighlight() {
             let on = isSelected || highlightState == .forSelection
+            view.setAccessibilitySelected(on)
             view.layer?.cornerRadius = 8
             view.layer?.backgroundColor = on
                 ? NSColor.selectedContentBackgroundColor.withAlphaComponent(0.3).cgColor : nil
@@ -261,6 +272,9 @@ struct FileGridView: NSViewRepresentable {
             let item = collectionView.makeItem(withIdentifier: FileGridItem.identifier, for: indexPath)
             let entry = rows[indexPath.item]
             item.textField?.stringValue = entry.name
+            // A recycled item must describe the current entry, not the one it showed before.
+            item.view.setAccessibilityLabel(AccessibilityText.file(entry))
+            item.view.setAccessibilityIdentifier(entry.name)
             let thumb = parent.thumbnail(entry)
             item.imageView?.image = thumb ?? icon(for: entry)
             (item as? FileGridItem)?.hasThumbnail = thumb != nil
@@ -322,6 +336,8 @@ struct FileGridView: NSViewRepresentable {
         private func item(_ title: String, _ action: Selector) -> NSMenuItem {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = self
+            // Stable identifier ("download", "rename", …) so UI tests don't depend on selector names.
+            item.identifier = NSUserInterfaceItemIdentifier(NSStringFromSelector(action).replacingOccurrences(of: "FromMenu", with: ""))
             return item
         }
 

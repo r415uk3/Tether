@@ -32,6 +32,20 @@ import MTPKit
         #expect(store.devices.isEmpty)
     }
 
+    @Test func applyMarksTheStoreLoaded() async throws {
+        let (store, service) = makeStore()
+        #expect(!store.hasLoaded)
+        store.apply(try await service.devices())
+        #expect(store.hasLoaded)
+    }
+
+    @Test func markLoadedEndsLoadingWithoutDevices() {
+        let (store, _) = makeStore()
+        store.markLoaded()
+        #expect(store.hasLoaded)
+        #expect(store.devices.isEmpty)
+    }
+
     @Test func reloadLoadsDevicesAndStorages() async throws {
         let (store, _) = makeStore()
         await store.reloadDevices()
@@ -260,6 +274,12 @@ private final class FlakyService: MTPService, @unchecked Sendable {
         get { lock.withLock { _fail } }
         set { lock.withLock { _fail = newValue } }
     }
+    private var _hangDevices = false
+    /// devices() never returns while set (a wedged helper).
+    var hangDevices: Bool {
+        get { lock.withLock { _hangDevices } }
+        set { lock.withLock { _hangDevices = newValue } }
+    }
     private var _hold = false, _started = false, _release = false
     /// The next list() reads its result, then waits until releaseHeldList, so it finishes with stale data.
     var holdNextList: Bool {
@@ -275,6 +295,7 @@ private final class FlakyService: MTPService, @unchecked Sendable {
     func setEventHandler(_ handler: @escaping @Sendable (ServiceEvent) -> Void) async { await base.setEventHandler(handler) }
     func devices() async throws -> [DeviceInfo] {
         if failDevices { throw MTPError.serviceInterrupted }
+        while hangDevices { try await Task.sleep(for: .milliseconds(20)) }
         return try await base.devices()
     }
     func storages(deviceID: DeviceID) async throws -> [StorageInfo] { try await base.storages(deviceID: deviceID) }

@@ -9,11 +9,11 @@ public enum NameProblem: Error, Equatable, Sendable {
     public var message: String {
         switch self {
         case .empty:
-            String(localized: "A name can’t be empty.")
+            String(localized: "A name can’t be empty.", bundle: .module)
         case .invalidCharacters:
-            String(localized: "Names can’t contain “/” or be “.” or “..”.")
+            String(localized: "Names can’t contain “/” or be “.” or “..”.", bundle: .module)
         case .taken(let name):
-            String(localized: "The name “\(name)” is already taken. Please choose a different name.")
+            String(localized: "The name “\(name)” is already taken. Please choose a different name.", bundle: .module)
         }
     }
 }
@@ -44,6 +44,6 @@ public enum NameValidation {
     /// "untitled folder", or "untitled folder 2", … if taken.
     public static func newFolderName(siblings: [FileEntry]) -> String {
         let names = Set(siblings.map(\.name.nameKey))
-        return Transfers.uniqueName(for: String(localized: "untitled folder")) { names.contains($0.nameKey) }
+        return Transfers.uniqueName(for: String(localized: "untitled folder", bundle: .module)) { names.contains($0.nameKey) }
     }
 }

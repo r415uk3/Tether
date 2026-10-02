@@ -3,6 +3,7 @@ import Quartz
 import SwiftUI
 import UniformTypeIdentifiers
 import MTPKit
+import TetherCore
 
 /// What the file list asks its owner to do. All closures run on the main actor.
 struct FileTableActions {
@@ -57,6 +58,7 @@ struct FileTableView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let table = FileTable()
+        table.setAccessibilityIdentifier("fileTable")
         table.style = .fullWidth
         table.usesAlternatingRowBackgroundColors = true
         table.allowsMultipleSelection = true
@@ -117,8 +119,12 @@ struct FileTableView: NSViewRepresentable {
         }
 
         override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
-        override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) { QuickLookController.shared.attach(panel, from: self) }
-        override func endPreviewPanelControl(_ panel: QLPreviewPanel!) { QuickLookController.shared.detach(panel, from: self) }
+        override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+            MainActor.assumeIsolated { QuickLookController.shared.attach(panel, from: self) }
+        }
+        override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+            MainActor.assumeIsolated { QuickLookController.shared.detach(panel, from: self) }
+        }
     }
 
     @MainActor
@@ -242,6 +248,10 @@ struct FileTableView: NSViewRepresentable {
             switch column {
             case .name:
                 cell.textField?.stringValue = entry.name
+                cell.setAccessibilityLabel(AccessibilityText.file(entry))
+                cell.setAccessibilityIdentifier(entry.name)
+                // The table's AX cell proxy doesn't forward the identifier, so the name text carries it too (UI tests).
+                cell.textField?.setAccessibilityIdentifier(entry.name)
                 cell.imageView?.image = icon(for: entry)
             case .size:
                 cell.textField?.stringValue = entry.isFolder
@@ -378,6 +388,8 @@ struct FileTableView: NSViewRepresentable {
         private func item(_ title: String, _ action: Selector) -> NSMenuItem {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = self
+            // Stable identifier ("download", "rename", …) so UI tests don't depend on selector names.
+            item.identifier = NSUserInterfaceItemIdentifier(NSStringFromSelector(action).replacingOccurrences(of: "FromMenu", with: ""))
             return item
         }
 
@@ -427,6 +439,7 @@ struct FileTableView: NSViewRepresentable {
                 let image = NSImageView()
                 image.translatesAutoresizingMaskIntoConstraints = false
                 cell.addSubview(image)
+                image.setAccessibilityElement(false)
                 cell.imageView = image
                 NSLayoutConstraint.activate([
                     image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),

@@ -33,7 +33,7 @@ struct ContentView: View {
         .onChange(of: model.devices.storages, initial: true) { ensureSelection() }
         .onChange(of: model.devices.devices) { ensureSelection() }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) { TransfersButton() }
+            ToolbarItem(placement: .automatic) { TransfersButton() }
         }
     }
 

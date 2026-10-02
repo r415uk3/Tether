@@ -4,6 +4,7 @@ options:
   deploymentTarget:
     macOS: "15.0"
   createIntermediateGroups: true
+  developmentLanguage: en
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -60,8 +61,23 @@ targets:
       - framework: Vendor/build/lib/libusb-1.0.0.dylib
         embed: true
         codeSign: true
+  TetherUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources: [TetherUITests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: dev.tether.TetherUITests
+        TEST_TARGET_NAME: Tether
+        ENABLE_HARDENED_RUNTIME: NO
+    dependencies:
+      - target: Tether
 schemes:
   Tether:
     build:
       targets:
         Tether: all
+    test:
+      targets:
+        - TetherUITests

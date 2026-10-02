@@ -58,6 +58,9 @@ public final class DeviceStore {
         return failure
     }
 
+    /// Ends the launch spinner even if the helper never answered; the no-phone guide shows until devices arrive.
+    public func markLoaded() { hasLoaded = true }
+
     public func reloadDevices() async {
         defer { hasLoaded = true }
         // A transient failure must not wipe known devices, storages and cached listings.
@@ -70,6 +73,7 @@ public final class DeviceStore {
     }
 
     public func apply(_ newDevices: [DeviceInfo]) {
+        hasLoaded = true
         let before = Dictionary(devices.filter { $0.state == .ready }.map { ($0.id, $0.session) },
                                 uniquingKeysWith: { first, _ in first })
         let now = Dictionary(newDevices.filter { $0.state == .ready }.map { ($0.id, $0.session) },

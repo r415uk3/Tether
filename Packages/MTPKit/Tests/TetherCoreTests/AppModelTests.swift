@@ -13,6 +13,15 @@ import MTPKit
         AppModel(service: service, thumbnailDirectory: try makeTempDirectory(), previewDirectory: try makeTempDirectory())
     }
 
+    @Test func initialLoadTimeoutEndsTheSpinner() async throws {
+        let model = try makeModel(HangingDevicesService(base: LocalMTPService(provider: provider)))
+        model.initialLoadTimeout = .milliseconds(100)
+        let start = Task { await model.start() }
+        try await eventually(timeout: .seconds(2)) { model.devices.hasLoaded }
+        #expect(model.devices.devices.isEmpty)
+        start.cancel()
+    }
+
     @Test func startLoadsDevicesAndRoutesProgress() async throws {
         provider.attach(device)
         let file = device.addFile("big.bin", data: Data(count: 100_000))
@@ -171,6 +180,38 @@ private final class HangingDiagnosticsService: MTPService, @unchecked Sendable {
     func diagnostics() async throws -> [String] {
         while true { try await Task.sleep(for: .seconds(3600)) }
     }
+    func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
+        try await base.thumbnail(objectID: objectID, in: folder)
+    }
+    func list(_ folder: FolderRef) async throws -> [FileEntry] { try await base.list(folder) }
+    func download(jobID: UUID, entry: FileEntry, deviceID: DeviceID, into directory: URL) async throws -> URL {
+        try await base.download(jobID: jobID, entry: entry, deviceID: deviceID, into: directory)
+    }
+    func upload(jobID: UUID, fileURL: URL, to folder: FolderRef, conflict: ConflictResolution) async throws -> FileEntry {
+        try await base.upload(jobID: jobID, fileURL: fileURL, to: folder, conflict: conflict)
+    }
+    func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry {
+        try await base.createFolder(named: name, in: folder)
+    }
+    func rename(_ entry: FileEntry, in folder: FolderRef, to newName: String) async throws {
+        try await base.rename(entry, in: folder, to: newName)
+    }
+    func delete(_ entry: FileEntry, in folder: FolderRef) async throws { try await base.delete(entry, in: folder) }
+    func cancel(jobID: UUID) async { await base.cancel(jobID: jobID) }
+    func restart() async { await base.restart() }
+}
+
+/// Forwards everything to a real service except `devices()`, which never returns (a wedged helper).
+private final class HangingDevicesService: MTPService, @unchecked Sendable {
+    let base: LocalMTPService
+    init(base: LocalMTPService) { self.base = base }
+    func setEventHandler(_ handler: @escaping @Sendable (ServiceEvent) -> Void) async { await base.setEventHandler(handler) }
+    func devices() async throws -> [DeviceInfo] {
+        while true { try await Task.sleep(for: .seconds(1)) }
+    }
+    func storages(deviceID: DeviceID) async throws -> [StorageInfo] { try await base.storages(deviceID: deviceID) }
+    func releaseDevice(_ deviceID: DeviceID) async throws { try await base.releaseDevice(deviceID) }
+    func diagnostics() async throws -> [String] { [] }
     func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
         try await base.thumbnail(objectID: objectID, in: folder)
     }

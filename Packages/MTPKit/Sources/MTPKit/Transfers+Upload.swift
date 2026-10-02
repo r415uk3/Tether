@@ -79,15 +79,13 @@ extension Transfers {
             for entry in old { try device.delete(objectID: entry.objectID) }
         } catch {
             let reason = MTPError.from(error).localizedDescription
-            throw MTPError.underlying(code: -5, message: String(
-                localized: "The new “\(finalName)” was copied as “\(uploaded.name)”, but the existing item couldn’t be removed. \(reason)"))
+            throw MTPError.underlying(code: -5, message: String(localized: "The new “\(finalName)” was copied as “\(uploaded.name)”, but the existing item couldn’t be removed. \(reason)", bundle: .module))
         }
         do {
             try device.rename(objectID: uploaded.objectID, to: finalName)
         } catch {
             let reason = MTPError.from(error).localizedDescription
-            throw MTPError.underlying(code: -4, message: String(
-                localized: "The new “\(finalName)” was copied as “\(uploaded.name)” but couldn’t be renamed. \(reason)"))
+            throw MTPError.underlying(code: -4, message: String(localized: "The new “\(finalName)” was copied as “\(uploaded.name)” but couldn’t be renamed. \(reason)", bundle: .module))
         }
         var renamed = uploaded
         renamed.name = finalName
