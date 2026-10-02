@@ -22,6 +22,29 @@ import MTPKit
         start.cancel()
     }
 
+    @Test func ejectCancelsOnlyThatPhonesTransfers() async throws {
+        // Two phones with slow transfers; each keeps one job active.
+        let provider = FakeDeviceProvider()
+        let slow = { (id: String) in FakeDevice(id: id, manufacturer: "Google", model: "Pixel", chunkSize: 1024, chunkDelay: 0.05) }
+        let a = slow("a"), b = slow("b")
+        let fileA = a.addFile("big.bin", data: Data(count: 1_000_000))
+        let fileB = b.addFile("big.bin", data: Data(count: 1_000_000))
+        provider.attach(a); provider.attach(b)
+        let model = try makeModel(LocalMTPService(provider: provider))
+        await model.devices.reloadDevices()
+        let dir = try makeTempDirectory()
+        let jobA = model.transfers.enqueueDownload(fileA, deviceID: "a", into: dir)
+        let jobB = model.transfers.enqueueDownload(fileB, deviceID: "b", into: dir)
+        try await eventually { model.activeTransferCount(for: "a") == 1 && model.activeTransferCount(for: "b") == 1 }
+
+        let error = await model.eject("a")
+
+        #expect(error == nil)
+        #expect(model.transfers.jobs.first { $0.id == jobA }?.state == .cancelled)
+        #expect(model.transfers.jobs.first { $0.id == jobB }?.isActive == true)
+        #expect(model.devices.devices.map(\.id) == ["b"])
+    }
+
     @Test func startLoadsDevicesAndRoutesProgress() async throws {
         provider.attach(device)
         let file = device.addFile("big.bin", data: Data(count: 100_000))
@@ -177,6 +200,7 @@ private final class HangingDiagnosticsService: MTPService, @unchecked Sendable {
     func devices() async throws -> [DeviceInfo] { try await base.devices() }
     func storages(deviceID: DeviceID) async throws -> [StorageInfo] { try await base.storages(deviceID: deviceID) }
     func releaseDevice(_ deviceID: DeviceID) async throws { try await base.releaseDevice(deviceID) }
+    func ejectDevice(_ deviceID: DeviceID) async throws { try await base.ejectDevice(deviceID) }
     func diagnostics() async throws -> [String] {
         while true { try await Task.sleep(for: .seconds(3600)) }
     }
@@ -211,6 +235,7 @@ private final class HangingDevicesService: MTPService, @unchecked Sendable {
     }
     func storages(deviceID: DeviceID) async throws -> [StorageInfo] { try await base.storages(deviceID: deviceID) }
     func releaseDevice(_ deviceID: DeviceID) async throws { try await base.releaseDevice(deviceID) }
+    func ejectDevice(_ deviceID: DeviceID) async throws { try await base.ejectDevice(deviceID) }
     func diagnostics() async throws -> [String] { [] }
     func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
         try await base.thumbnail(objectID: objectID, in: folder)

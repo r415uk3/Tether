@@ -120,6 +120,14 @@ final class XPCTestHost: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
         withExtendedLifetime(host) {}
     }
 
+    @Test func ejectCrossesXPC() async throws {
+        let (client, host) = makeClient()
+        #expect(try await client.devices().map(\.id) == ["p1"])
+        try await client.ejectDevice("p1")
+        #expect(try await client.devices().isEmpty)
+        withExtendedLifetime(host) {}
+    }
+
     @Test func diagnosticsCrossXPC() async throws {
         let log = DiagnosticLog()
         log.record("hello", category: "test")

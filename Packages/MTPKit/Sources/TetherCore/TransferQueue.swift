@@ -84,6 +84,11 @@ public final class TransferQueue {
         enqueue(.upload(url, folder: folder, conflict: conflict), completion: nil)
     }
 
+    /// Cancels every queued or running job for one phone (used before ejecting it).
+    public func cancelAll(deviceID: DeviceID) {
+        for job in jobs where job.isActive && job.deviceID == deviceID { cancel(job.id) }
+    }
+
     public func cancel(_ id: UUID) {
         guard let i = index(id) else { return }
         switch jobs[i].state {

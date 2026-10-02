@@ -44,6 +44,15 @@ final class TetherUITests: XCTestCase {
         XCTAssertTrue(cell("notes.txt").waitForExistence(timeout: 10), "Pixel 9's root folder didn't load")
     }
 
+    func testEject() {
+        launchToRoot()
+        app.outlines["sidebar"].buttons["Eject Pixel 9"].click()
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: app.outlines["sidebar"].staticTexts["Pixel 9"])
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.outlines["sidebar"].staticTexts["Galaxy S25"].exists, "the other phone must stay")
+    }
+
     func testBrowse() {
         launchToRoot()
         cell("DCIM").doubleClick()

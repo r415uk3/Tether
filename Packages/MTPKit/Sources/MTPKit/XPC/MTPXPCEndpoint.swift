@@ -60,6 +60,9 @@ public final class MTPXPCEndpoint: NSObject, MTPXPCProtocol, @unchecked Sendable
         case .releaseDevice(let id):
             try await service.releaseDevice(id)
             return .ok
+        case .ejectDevice(let id):
+            try await service.ejectDevice(id)
+            return .ok
         case .diagnostics:
             return .lines(try await service.diagnostics())
         case .cancel(let jobID):

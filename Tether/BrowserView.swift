@@ -17,6 +17,7 @@ struct BrowserView: View {
     /// Folder the pending delete was requested in (navigating before confirming must not retarget it).
     @State private var pendingDeleteFolder: FolderRef?
     @State private var problem: String?
+    @State private var confirmingEject = false
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
     @AppStorage(SettingsKey.viewMode) private var viewMode = BrowserViewMode.list
     @State private var renamingEntry: FileEntry?
@@ -110,6 +111,7 @@ struct BrowserView: View {
             } message: {
                 Text("This can’t be undone.")
             }
+            .modifier(EjectDialog(deviceID: selection.deviceID, isPresented: $confirmingEject))
             .alert(String(localized: "The Operation Couldn’t Be Completed"), isPresented: isShowingProblem) {
                 Button(String(localized: "OK")) {}
             } message: {
@@ -178,9 +180,10 @@ struct BrowserView: View {
         let newFolderAction: (() -> Void)? = editing ? nil : { newFolder() }
         let showIconsAction: (() -> Void)? = editing ? nil : { viewMode = .icons }
         let showListAction: (() -> Void)? = editing ? nil : { viewMode = .list }
+        let ejectAction: (() -> Void)? = editing ? nil : { requestEject() }
         return BrowserActions(
             newFolder: newFolderAction, refresh: refresh, goUp: goUpAction, open: openAction,
-            download: downloadAction, rename: renameAction, delete: deleteAction,
+            download: downloadAction, rename: renameAction, delete: deleteAction, eject: ejectAction,
             showIcons: showIconsAction, showList: showListAction, quickLook: quickLookAction)
     }
 
@@ -193,6 +196,11 @@ struct BrowserView: View {
         if listing?.isUpdating == true { return String(localized: "Updating…") }
         guard let listing, listing.error == nil || !listing.entries.isEmpty else { return "" }
         return String(localized: "\(visibleEntries.count) items")
+    }
+
+    private func requestEject() {
+        let id = selection.deviceID
+        if model.activeTransferCount(for: id) > 0 { confirmingEject = true } else { Task { _ = await model.eject(id) } }
     }
 
     private func goUp() {
@@ -333,5 +341,20 @@ struct BrowserView: View {
 
     private var isShowingProblem: Binding<Bool> {
         Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })
+    }
+}
+
+/// Shows the shared eject confirmation for the phone this browser belongs to.
+private struct EjectDialog: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let deviceID: DeviceID
+    @Binding var isPresented: Bool
+
+    func body(content: Content) -> some View {
+        if let device = model.devices.devices.first(where: { $0.id == deviceID }) {
+            content.ejectConfirmation(for: device, isPresented: $isPresented)
+        } else {
+            content
+        }
     }
 }

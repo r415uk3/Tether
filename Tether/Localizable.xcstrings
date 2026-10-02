@@ -63,6 +63,58 @@
         }
       }
     },
+    "%lld transfers will stop." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld transfer will stop."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld transfers will stop."
+                }
+              }
+            }
+          }
+        },
+        "ru" : {
+          "variations" : {
+            "plural" : {
+              "few" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld передачи будут остановлены."
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld передач будут остановлены."
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld передача будет остановлена."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld передачи будут остановлены."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "An item named “%@” already exists in this folder." : {
       "localizations" : {
         "ru" : {
@@ -475,6 +527,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Перетащите сюда файлы, чтобы скопировать их на телефон."
+          }
+        }
+      }
+    },
+    "Eject" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Извлечь"
+          }
+        }
+      }
+    },
+    "Eject %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Извлечь %@"
+          }
+        }
+      }
+    },
+    "Eject “%@”?" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Извлечь «%@»?"
           }
         }
       }
