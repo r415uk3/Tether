@@ -62,3 +62,12 @@ public func withTimeout<T: Sendable>(
         }
     }
 }
+
+/// Runs a blocking call (libmtp `open`, agent termination) off Swift's cooperative pool.
+/// The pool has about one thread per core, so blocking inside `Task.detached` can starve every task, including the
+/// one that would unblock the call. GCD's global queue adds threads for blocked work, so blocking here is safe.
+func runBlocking<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
+    await withCheckedContinuation { continuation in
+        DispatchQueue.global(qos: .userInitiated).async { continuation.resume(returning: work()) }
+    }
+}

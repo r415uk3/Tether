@@ -74,9 +74,9 @@ public actor LocalMTPService: MTPService {
             let generation = generations[device.id, default: 0]
             opening[device.id] = startEpoch
             let provider = self.provider
-            let result = await Task.detached { () -> Result<any MTPDevice, MTPError> in
+            let result = await runBlocking { () -> Result<any MTPDevice, MTPError> in
                 do { return .success(try provider.open(device)) } catch { return .failure(MTPError.from(error)) }
-            }.value
+            }
             if opening[device.id] == startEpoch { opening[device.id] = nil }
 
             // Reentrancy: the device may have been unplugged/replugged or the service restarted while opening.
@@ -156,7 +156,7 @@ public actor LocalMTPService: MTPService {
         default: break
         }
         let provider = self.provider
-        let released = await Task.detached { provider.releaseClaims() }.value
+        let released = await runBlocking { provider.releaseClaims() }
         signalled = released
         guard released else { throw MTPError.claimedByOtherProcess }
         try? await Task.sleep(for: .milliseconds(500)) // give the agent a moment to let go of the interface
