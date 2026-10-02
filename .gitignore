@@ -6,3 +6,4 @@ DerivedData/
 Vendor/build/
 Vendor/.cache/
 Vendor/.work/
+dist/
