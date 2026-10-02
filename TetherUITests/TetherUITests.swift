@@ -161,6 +161,7 @@ final class TetherUITests: XCTestCase {
         }
         XCTAssertFalse(app.toolbars.buttons["Transfers"].exists, "English Transfers button is still shown")
         XCTAssertTrue(app.staticTexts["4 объекта"].exists, "Window subtitle isn't the Russian item count")
+        XCTAssertTrue(table.buttons["Тип"].exists || table.staticTexts["Тип"].exists, "Kind column header isn't Russian")
     }
 
     func testSearchFiltersTheFolder() {
@@ -171,5 +172,11 @@ final class TetherUITests: XCTestCase {
         XCTAssertFalse(cell("DCIM").exists)
         cell("notes.txt").click()   // search keeps working with the table
         app.typeKey(.escape, modifierFlags: [])
+    }
+
+    func testKindColumn() {
+        launchToRoot()
+        XCTAssertTrue(table.buttons["Kind"].exists || table.staticTexts["Kind"].exists, "Kind column header missing")
+        XCTAssertTrue(table.staticTexts.matching(NSPredicate(format: "value ==[c] %@ OR label ==[c] %@", "Folder", "Folder")).firstMatch.exists)
     }
 }

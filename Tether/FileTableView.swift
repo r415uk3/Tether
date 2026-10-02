@@ -33,7 +33,7 @@ struct FileTableView: NSViewRepresentable {
     var actions: FileTableActions
 
     enum Column: String, CaseIterable {
-        case name, size, modified
+        case name, size, kind, modified
 
         var identifier: NSUserInterfaceItemIdentifier { NSUserInterfaceItemIdentifier(rawValue) }
 
@@ -41,6 +41,7 @@ struct FileTableView: NSViewRepresentable {
             switch self {
             case .name: String(localized: "Name")
             case .size: String(localized: "Size")
+            case .kind: String(localized: "Kind")
             case .modified: String(localized: "Date Modified")
             }
         }
@@ -49,6 +50,7 @@ struct FileTableView: NSViewRepresentable {
             switch self {
             case .name: 320
             case .size: 90
+            case .kind: 140
             case .modified: 170
             }
         }
@@ -186,8 +188,16 @@ struct FileTableView: NSViewRepresentable {
             let descriptor = table?.sortDescriptors.first
             let key = descriptor?.key ?? Column.name.rawValue
             let ascending = descriptor?.ascending ?? true
+            // One description per entry (not per comparison) when sorting by kind.
+            let kinds: [UInt32: String] = key == Column.kind.rawValue
+                ? Dictionary(source.map { ($0.objectID, FileKind.description(for: $0)) }, uniquingKeysWith: { first, _ in first })
+                : [:]
             func less(_ a: FileEntry, _ b: FileEntry) -> Bool {
                 switch key {
+                case Column.kind.rawValue:
+                    kinds[a.objectID] != kinds[b.objectID]
+                        ? (kinds[a.objectID] ?? "").localizedStandardCompare(kinds[b.objectID] ?? "") == .orderedAscending
+                        : a.name.localizedStandardCompare(b.name) == .orderedAscending
                 case Column.size.rawValue:
                     a.size != b.size ? a.size < b.size : a.name.localizedStandardCompare(b.name) == .orderedAscending
                 case Column.modified.rawValue:
@@ -256,6 +266,8 @@ struct FileTableView: NSViewRepresentable {
             case .size:
                 cell.textField?.stringValue = entry.isFolder
                     ? "—" : ByteCountFormatter.string(fromByteCount: Int64(clamping: entry.size), countStyle: .file)
+            case .kind:
+                cell.textField?.stringValue = FileKind.description(for: entry)
             case .modified:
                 cell.textField?.stringValue = entry.modified?.formatted(date: .abbreviated, time: .shortened) ?? "—"
             }

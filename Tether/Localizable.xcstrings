@@ -681,6 +681,16 @@
         }
       }
     },
+    "Kind" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тип"
+          }
+        }
+      }
+    },
     "List" : {
       "localizations" : {
         "ru" : {
