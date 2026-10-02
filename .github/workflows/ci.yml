@@ -1,0 +1,42 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-test:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select newest Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+      - name: Tools
+        run: brew install xcodegen
+      - name: Cache native libs
+        uses: actions/cache@v4
+        with:
+          path: Vendor/build
+          key: vendor-${{ runner.os }}-${{ hashFiles('Vendor/build-libs.sh') }}
+      - name: Build libusb + libmtp
+        run: '[ -f Vendor/build/lib/libmtp.9.dylib ] || Vendor/build-libs.sh'
+      - name: Script tests
+        run: scripts/test-appcast.sh
+      - name: Unit tests
+        run: swift test --package-path Packages/MTPKit
+      - name: App build
+        run: |
+          xcodegen generate
+          xcodebuild -project Tether.xcodeproj -scheme Tether -configuration Debug -derivedDataPath DerivedData build | tee build.log | tail -5
+          ! grep -E '\.(swift|m|c|h):[0-9]+:[0-9]+: warning:' build.log
+      - name: Strings in sync
+        run: |
+          scripts/sync-strings.sh
+          git diff --exit-code -- '*.xcstrings'
