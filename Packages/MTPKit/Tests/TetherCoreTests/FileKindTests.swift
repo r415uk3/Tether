@@ -25,8 +25,8 @@ import MTPKit
         #expect(FileKind.description(for: entry("data.zzqq")) == document)
     }
 
-    @Test func russianDocumentWord() {
-        let ru = Bundle(url: Bundle.module.url(forResource: "ru", withExtension: "lproj")!)!
+    @Test func russianDocumentWord() throws {
+        let ru = try russianBundle()
         #expect(ru.localizedString(forKey: "Document", value: "?", table: nil) == "Документ")
     }
 }

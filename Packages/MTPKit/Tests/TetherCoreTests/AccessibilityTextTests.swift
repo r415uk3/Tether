@@ -46,8 +46,8 @@ import MTPKit
         #expect(AccessibilityText.storage(StorageInfo(id: 1, name: "SD card", capacity: 0, freeSpace: 0)) == "SD card")
     }
 
-    @Test func russianFolderWord() {
-        let ru = Bundle(url: Bundle.module.url(forResource: "ru", withExtension: "lproj")!)!
+    @Test func russianFolderWord() throws {
+        let ru = try russianBundle()
         #expect(ru.localizedString(forKey: "%@, folder", value: "?", table: nil) == "%@, папка")
     }
 

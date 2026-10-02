@@ -55,8 +55,13 @@ To produce a release build and DMG, run `scripts/build-release.sh`.
 ### Tests
 
 ```bash
-swift test --package-path Packages/MTPKit
+cd Packages/MTPKit
+xcodebuild test -scheme MTPKit-Package -destination 'platform=macOS' -derivedDataPath ../../DerivedData/pkg
 ```
+
+Run the package tests through `xcodebuild test` (this is what CI does), or with `swift test --package-path Packages/MTPKit`
+on Xcode 27+. Older command-line SwiftPM does not compile string catalogs (`.xcstrings`), so the localization tests
+fail with "ru.lproj not compiled".
 
 ## Licence
 

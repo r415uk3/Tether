@@ -13,12 +13,12 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - name: Select newest Xcode
         run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | grep -viE 'beta|release_candidate|rc' | sort -V | tail -1)"
       - run: brew install xcodegen
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: Vendor/build
           key: vendor-${{ runner.os }}-${{ hashFiles('Vendor/build-libs.sh') }}
@@ -33,7 +33,7 @@ jobs:
       - name: Script tests
         run: scripts/test-appcast.sh
       - name: Unit tests
-        run: swift test --package-path Packages/MTPKit
+        run: cd Packages/MTPKit && xcodebuild test -scheme MTPKit-Package -destination 'platform=macOS' -derivedDataPath ../../DerivedData/pkg
       - name: Build DMG
         run: scripts/build-release.sh --version "$VERSION" --build "$BUILD" --out dist
       - name: Verify embedded public key

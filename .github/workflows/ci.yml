@@ -16,7 +16,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Select newest Xcode
         run: |
           XC=$(ls -d /Applications/Xcode*.app | grep -viE 'beta|release_candidate|rc' | sort -V | tail -1)
@@ -26,7 +26,7 @@ jobs:
       - name: Tools
         run: brew install xcodegen
       - name: Cache native libs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: Vendor/build
           key: vendor-${{ runner.os }}-${{ hashFiles('Vendor/build-libs.sh') }}
@@ -35,7 +35,7 @@ jobs:
       - name: Script tests
         run: scripts/test-appcast.sh
       - name: Unit tests
-        run: swift test --package-path Packages/MTPKit
+        run: cd Packages/MTPKit && xcodebuild test -scheme MTPKit-Package -destination 'platform=macOS' -derivedDataPath ../../DerivedData/pkg
       - name: App build
         run: |
           xcodegen generate
