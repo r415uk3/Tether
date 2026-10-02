@@ -53,6 +53,18 @@ final class TetherUITests: XCTestCase {
         XCTAssertTrue(app.outlines["sidebar"].staticTexts["Galaxy S25"].exists, "the other phone must stay")
     }
 
+    func testBackAndForward() {
+        launchToRoot()
+        cell("DCIM").doubleClick()
+        XCTAssertTrue(cell("Camera").waitForExistence(timeout: 5))
+        app.typeKey("[", modifierFlags: .command)
+        XCTAssertTrue(cell("notes.txt").waitForExistence(timeout: 5))
+        app.typeKey("]", modifierFlags: .command)
+        XCTAssertTrue(cell("Camera").waitForExistence(timeout: 5))
+        cell("Camera").doubleClick()   // navigating after a round trip still uses live handles
+        XCTAssertTrue(cell("IMG_0001.jpg").waitForExistence(timeout: 5))
+    }
+
     func testBrowse() {
         launchToRoot()
         cell("DCIM").doubleClick()

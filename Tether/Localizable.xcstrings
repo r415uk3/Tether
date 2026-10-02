@@ -601,6 +601,16 @@
         }
       }
     },
+    "Forward" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вперёд"
+          }
+        }
+      }
+    },
     "Go" : {
       "localizations" : {
         "ru" : {

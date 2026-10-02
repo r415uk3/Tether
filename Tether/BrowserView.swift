@@ -5,7 +5,7 @@ import TetherCore
 struct BrowserView: View {
     @Environment(AppModel.self) private var model
     let selection: StorageSelection
-    @State private var path: [FileEntry] = []
+    @State private var history = NavigationHistory(start: [FileEntry]())
     /// The connection session `path` was built in; its handles mean nothing in any other session.
     @State private var pathSession: UUID?
     @State private var selectedIDs: Set<UInt32> = []
@@ -22,6 +22,8 @@ struct BrowserView: View {
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
     @AppStorage(SettingsKey.viewMode) private var viewMode = BrowserViewMode.list
     @State private var renamingEntry: FileEntry?
+
+    private var path: [FileEntry] { history.current }
 
     private var session: UUID? { model.devices.session(for: selection.deviceID) }
 
@@ -60,11 +62,17 @@ struct BrowserView: View {
             .overlay { overlay(for: listing) }
             .navigationTitle(title)
             .navigationSubtitle(subtitle(for: listing))
+            .toolbarTitleMenu { pathMenu }
             .toolbar {
                 ToolbarItem(placement: .navigation) {
-                    Button(action: goUp) { Label("Back", systemImage: "chevron.left") }
-                        .help("Back")
-                        .disabled(path.isEmpty || isEditingName)
+                    ControlGroup {
+                        Button(action: goBack) { Label("Back", systemImage: "chevron.left") }
+                            .help("Back")
+                            .disabled(!history.canGoBack || isEditingName)
+                        Button(action: goForward) { Label("Forward", systemImage: "chevron.right") }
+                            .help("Forward")
+                            .disabled(!history.canGoForward || isEditingName)
+                    }
                 }
                 ToolbarItem {
                     Picker("View", selection: $viewMode) {
@@ -94,7 +102,7 @@ struct BrowserView: View {
             }
             .onChange(of: session) {
                 QuickLookController.shared.invalidate()
-                path = []
+                history.reset(to: [])
             }
             .onChange(of: selectedIDs) {
                 if QuickLookController.shared.isVisible { showQuickLook(selectedEntries) }
@@ -170,6 +178,8 @@ struct BrowserView: View {
         let editing = isEditingName
         // Navigating away mid-rename would discard the typed name.
         let goUpAction: (() -> Void)? = path.isEmpty || editing ? nil : { goUp() }
+        let goBackAction: (() -> Void)? = history.canGoBack && !editing ? { goBack() } : nil
+        let goForwardAction: (() -> Void)? = history.canGoForward && !editing ? { goForward() } : nil
         let openAction: (() -> Void)? =
             selected.count == 1 && selected[0].isFolder && !editing ? { open(selected[0]) } : nil
         let downloadAction: (() -> Void)? = selected.isEmpty ? nil : { download(selected) }
@@ -183,7 +193,7 @@ struct BrowserView: View {
         let showListAction: (() -> Void)? = editing ? nil : { viewMode = .list }
         let ejectAction: (() -> Void)? = editing || model.devices.ejecting.contains(selection.deviceID) ? nil : { requestEject() }
         return BrowserActions(
-            newFolder: newFolderAction, refresh: refresh, goUp: goUpAction, open: openAction,
+            newFolder: newFolderAction, refresh: refresh, goBack: goBackAction, goForward: goForwardAction, goUp: goUpAction, open: openAction,
             download: downloadAction, rename: renameAction, delete: deleteAction, eject: ejectAction,
             showIcons: showIconsAction, showList: showListAction, quickLook: quickLookAction)
     }
@@ -206,7 +216,22 @@ struct BrowserView: View {
     }
 
     private func goUp() {
-        if !path.isEmpty { path.removeLast() }
+        if !path.isEmpty { history.visit(Array(path.dropLast())) }
+    }
+
+    private func goBack() { history.goBack() }
+
+    private func goForward() { history.goForward() }
+
+    @ViewBuilder private var pathMenu: some View {
+        if let storageName = model.devices.storage(for: folder)?.name {
+            Button { history.visit([]) } label: { Text(verbatim: storageName) }
+        } else {
+            Button("Phone") { history.visit([]) }
+        }
+        ForEach(Array(path.dropLast().enumerated()), id: \.offset) { index, entry in
+            Button { history.visit(Array(path.prefix(index + 1))) } label: { Text(verbatim: entry.name) }
+        }
     }
 
     private func refresh() {
@@ -217,7 +242,7 @@ struct BrowserView: View {
     private func open(_ entry: FileEntry) {
         if entry.isFolder {
             pathSession = session
-            path.append(entry)
+            history.visit(path + [entry])
         } else {
             showQuickLook([entry]) // double-click replaces the preview; it never closes the panel
         }
