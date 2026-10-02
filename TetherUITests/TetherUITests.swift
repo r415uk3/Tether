@@ -33,10 +33,10 @@ final class TetherUITests: XCTestCase {
 
     private var table: XCUIElement { app.tables["fileTable"] }
 
-    /// The name-column cell of a row. A plain `[name]` subscript also matches the name's StaticText by value
-    /// (no label), so match on the cell's VoiceOver label ("name, size" / "name, folder") instead.
+    /// The name-column cell of a row. A file's accessibility identifier is its name; the table's cell proxy doesn't
+    /// expose it, so find the cell by the identifier of its name text (a plain `[name]` subscript would return the text).
     private func cell(_ name: String) -> XCUIElement {
-        table.cells.matching(NSPredicate(format: "label BEGINSWITH %@", name + ", ")).firstMatch
+        table.cells.containing(.staticText, identifier: name).firstMatch
     }
 
     private func launchToRoot() {
@@ -57,8 +57,8 @@ final class TetherUITests: XCTestCase {
     func testDownload() throws {
         launchToRoot()
         cell("notes.txt").rightClick()
-        // "Download" also exists (disabled, zero-size) in the menu bar, so address the context-menu item by identifier.
-        app.menuItems["downloadFromMenu"].click()
+        // "Download" also exists (disabled, zero-size) in the menu bar, so address the context-menu item by its identifier.
+        app.menuItems["download"].click()
         let file = downloads.appending(path: "notes.txt")
         let deadline = Date().addingTimeInterval(10)
         while !FileManager.default.fileExists(atPath: file.path), Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.2)) }
@@ -73,6 +73,7 @@ final class TetherUITests: XCTestCase {
         let panel = app.windows["open-panel"] // NSOpenPanel is its own window, not a sheet
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
         app.typeKey("g", modifierFlags: [.command, .shift])
+        XCTAssertTrue(panel.sheets.textFields.firstMatch.waitForExistence(timeout: 5), "Go-to-folder field didn't appear")
         app.typeText(source.path + "\n")
         let ok = panel.buttons["OKButton"]
         XCTAssertTrue(ok.waitForExistence(timeout: 5))
@@ -99,18 +100,17 @@ final class TetherUITests: XCTestCase {
         let renamed = cell("spoken.txt")
         XCTAssertTrue(renamed.waitForExistence(timeout: 5))
         XCTAssertTrue(renamed.label.hasPrefix("spoken.txt, "), "VoiceOver label is stale: \(renamed.label)")
+        XCTAssertFalse(cell("notes.txt").exists)
     }
 
     func testDelete() {
         launchToRoot()
         cell("notes.txt").click()
         app.typeKey(.delete, modifierFlags: .command)
-        let confirm = app.dialogs.buttons["Delete"].exists ? app.dialogs.buttons["Delete"] : app.sheets.buttons["Delete"]
+        let confirm = app.sheets.buttons["Delete"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.click()
-        let gone = NSPredicate(format: "exists == false")
-        expectation(for: gone, evaluatedWith: cell("notes.txt"))
-        waitForExpectations(timeout: 5)
+        XCTAssertTrue(cell("notes.txt").waitForNonExistence(timeout: 10), "notes.txt is still listed after deleting it")
     }
 
     func testLockedPhoneShowsUnlockGuidance() {
@@ -134,5 +134,11 @@ final class TetherUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Устройства"].exists, "Sidebar section isn't Russian")
         XCTAssertTrue(app.toolbars.buttons["Новая папка"].exists, "Toolbar isn't Russian")
         XCTAssertEqual(cell("DCIM").label, "DCIM, папка")
+        XCTAssertFalse(app.staticTexts["Devices"].exists, "English sidebar section is still shown")
+        for title in ["New Folder", "Refresh", "Upload"] {
+            XCTAssertFalse(app.toolbars.buttons[title].exists, "English toolbar button \(title) is still shown")
+        }
+        XCTAssertFalse(app.toolbars.buttons["Transfers"].exists, "English Transfers button is still shown")
+        XCTAssertTrue(app.staticTexts["4 объекта"].exists, "Window subtitle isn't the Russian item count")
     }
 }

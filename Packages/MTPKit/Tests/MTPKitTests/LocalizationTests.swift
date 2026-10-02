@@ -26,6 +26,15 @@ private let ru = Bundle(url: Bundle.module.url(forResource: "ru", withExtension:
         #expect(MTPError.underlying(code: 13, message: "Disk full").errorDescription == "Disk full")
     }
 
+    @Test func libmtpCodesGetGenericTextWithoutRawMessage() {
+        for raw in [1, 2, 8] {
+            let error = MTPError.underlying(code: MTPError.libmtpCode(raw), message: "PTP Layer error 02ff")
+            #expect(error.errorDescription?.contains("PTP") == false)
+            #expect(error.errorDescription?.isEmpty == false)
+            #expect(error.logDescription == "underlying(code: \(-100 - raw))")
+        }
+    }
+
     @Test(arguments: [-4, -5, -6]) func tetherLocalizedUnderlyingMessagesPassThrough(_ code: Int) {
         #expect(MTPError.underlying(code: code, message: "x").errorDescription == "x")
     }

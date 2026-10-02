@@ -12,6 +12,7 @@ struct TransfersButton: View {
         } label: {
             Label("Transfers", systemImage: model.transfers.hasActiveJobs ? "arrow.down.circle.dotted" : "arrow.down.circle")
         }
+        .accessibilityValue(model.transfers.hasActiveJobs ? Text("In progress") : Text(verbatim: ""))
         .accessibilityIdentifier("transfersButton")
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             TransfersList()

@@ -549,6 +549,16 @@
         }
       }
     },
+    "In progress" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выполняется"
+          }
+        }
+      }
+    },
     "In the USB notification, choose “File transfer”." : {
       "localizations" : {
         "ru" : {
