@@ -22,6 +22,8 @@ struct BrowserView: View {
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
     @AppStorage(SettingsKey.viewMode) private var viewMode = BrowserViewMode.list
     @State private var renamingEntry: FileEntry?
+    @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
 
     private var path: [FileEntry] { history.current }
 
@@ -39,7 +41,9 @@ struct BrowserView: View {
 
     /// Every entry, hidden ones included (used for name-clash checks).
     private var allEntries: [FileEntry] { model.devices.listings[folder]?.entries ?? [] }
-    private var visibleEntries: [FileEntry] { EntryFilter.visible(allEntries, showHidden: showHiddenFiles) }
+    private var visibleEntries: [FileEntry] {
+        EntryFilter.matching(EntryFilter.visible(allEntries, showHidden: showHiddenFiles), query: searchText)
+    }
     private var selectedEntries: [FileEntry] { visibleEntries.filter { selectedIDs.contains($0.objectID) } }
 
     var body: some View {
@@ -63,6 +67,8 @@ struct BrowserView: View {
             .navigationTitle(title)
             .navigationSubtitle(subtitle(for: listing))
             .toolbarTitleMenu { pathMenu }
+            .searchable(text: $searchText, placement: .toolbar, prompt: Text("Search in This Folder"))
+            .searchFocused($searchFocused)
             .toolbar {
                 ToolbarItem(placement: .navigation) {
                     ControlGroup {
@@ -99,10 +105,12 @@ struct BrowserView: View {
                 QuickLookController.shared.invalidate()
                 selectedIDs = []
                 renameRequest = nil
+                searchText = ""
             }
             .onChange(of: session) {
                 QuickLookController.shared.invalidate()
                 history.reset(to: [])
+                searchText = ""
             }
             .onChange(of: selectedIDs) {
                 if QuickLookController.shared.isVisible { showQuickLook(selectedEntries) }
@@ -146,6 +154,8 @@ struct BrowserView: View {
             } actions: {
                 Button("Try Again", action: refresh)
             }
+        } else if visibleEntries.isEmpty && !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+            ContentUnavailableView.search(text: searchText)
         } else if visibleEntries.isEmpty {
             ContentUnavailableView("Empty Folder", systemImage: "folder",
                                    description: Text("Drop files here to copy them to the phone."))
@@ -192,9 +202,10 @@ struct BrowserView: View {
         let showIconsAction: (() -> Void)? = editing ? nil : { viewMode = .icons }
         let showListAction: (() -> Void)? = editing ? nil : { viewMode = .list }
         let ejectAction: (() -> Void)? = editing || model.devices.ejecting.contains(selection.deviceID) ? nil : { requestEject() }
+        let findAction: (() -> Void)? = { searchFocused = true }
         return BrowserActions(
             newFolder: newFolderAction, refresh: refresh, goBack: goBackAction, goForward: goForwardAction, goUp: goUpAction, open: openAction,
-            download: downloadAction, rename: renameAction, delete: deleteAction, eject: ejectAction,
+            download: downloadAction, rename: renameAction, delete: deleteAction, eject: ejectAction, find: findAction,
             showIcons: showIconsAction, showList: showListAction, quickLook: quickLookAction)
     }
 

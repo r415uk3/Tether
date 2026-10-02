@@ -601,6 +601,16 @@
         }
       }
     },
+    "Find" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Найти"
+          }
+        }
+      }
+    },
     "Forward" : {
       "localizations" : {
         "ru" : {
@@ -897,6 +907,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Повторить %@"
+          }
+        }
+      }
+    },
+    "Search in This Folder" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поиск в этой папке"
           }
         }
       }

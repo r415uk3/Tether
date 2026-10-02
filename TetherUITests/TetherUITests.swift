@@ -162,4 +162,14 @@ final class TetherUITests: XCTestCase {
         XCTAssertFalse(app.toolbars.buttons["Transfers"].exists, "English Transfers button is still shown")
         XCTAssertTrue(app.staticTexts["4 объекта"].exists, "Window subtitle isn't the Russian item count")
     }
+
+    func testSearchFiltersTheFolder() {
+        launchToRoot()
+        app.typeKey("f", modifierFlags: .command)
+        app.typeText("note")
+        XCTAssertTrue(cell("notes.txt").waitForExistence(timeout: 5))
+        XCTAssertFalse(cell("DCIM").exists)
+        cell("notes.txt").click()   // search keeps working with the table
+        app.typeKey(.escape, modifierFlags: [])
+    }
 }
