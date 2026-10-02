@@ -10,6 +10,7 @@ struct BrowserActions {
     var download: (() -> Void)?
     var rename: (() -> Void)?
     var delete: (() -> Void)?
+    var eject: (() -> Void)?
     var showIcons: (() -> Void)?
     var showList: (() -> Void)?
     var quickLook: (() -> Void)?
@@ -43,6 +44,10 @@ struct BrowserCommands: Commands {
             Button("Delete…") { actions?.delete?() }
                 .keyboardShortcut(.delete, modifiers: .command)
                 .disabled(actions?.delete == nil)
+            Divider()
+            Button("Eject") { actions?.eject?() }
+                .keyboardShortcut("e")
+                .disabled(actions?.eject == nil)
         }
         CommandGroup(after: .sidebar) {
             Button("as Icons") { actions?.showIcons?() }

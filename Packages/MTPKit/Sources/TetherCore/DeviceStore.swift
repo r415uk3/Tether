@@ -58,6 +58,14 @@ public final class DeviceStore {
         return failure
     }
 
+    /// Closes Tether's connection to the phone; it disappears from the list until it is unplugged and plugged in again.
+    public func eject(_ id: DeviceID) async -> MTPError? {
+        var failure: MTPError?
+        do { try await service.ejectDevice(id) } catch { failure = MTPError.from(error) }
+        await reloadDevices()
+        return failure
+    }
+
     /// Ends the launch spinner even if the helper never answered; the no-phone guide shows until devices arrive.
     public func markLoaded() { hasLoaded = true }
 

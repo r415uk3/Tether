@@ -28,6 +28,8 @@ public protocol MTPService: Sendable {
     func restart() async
     /// Frees a phone held by Image Capture and reconnects. Throws `.claimedByOtherProcess` if it stays held.
     func releaseDevice(_ deviceID: DeviceID) async throws
+    /// Closes Tether's connection to the phone and hides it until it is unplugged (Finder's Eject).
+    func ejectDevice(_ deviceID: DeviceID) async throws
     /// The service process's recent log lines (the helper's when over XPC). Never contains names or serials.
     func diagnostics() async throws -> [String]
 }

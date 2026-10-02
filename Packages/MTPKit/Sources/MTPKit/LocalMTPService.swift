@@ -14,6 +14,8 @@ public actor LocalMTPService: MTPService {
     /// Bumped by `restart()`; opens started in an older epoch are discarded.
     private var epoch = 0
     private var lastAttached: Set<DeviceID> = []
+    /// Transport keys the user ejected; skipped by scans until a scan sees them unplugged.
+    private var ejected: Set<DeviceID> = []
     /// The first scan is shared: concurrent first callers all await the same task.
     private var firstScan: Task<Void, Never>?
     private var hasScanned = false
@@ -56,6 +58,7 @@ public actor LocalMTPService: MTPService {
     private func performScan() async {
         let attached = provider.attachedDevices()
         lastAttached = Set(attached.map(\.id))
+        ejected.formIntersection(lastAttached) // unplugged phones come back next time they're attached
 
         for id in Set(infos.keys).union(opening.keys) where !lastAttached.contains(id) {
             generations[id, default: 0] += 1
@@ -65,7 +68,7 @@ public actor LocalMTPService: MTPService {
             publicIDs[id] = nil
         }
 
-        for device in attached where workers[device.id] == nil && opening[device.id] == nil {
+        for device in attached where workers[device.id] == nil && opening[device.id] == nil && !ejected.contains(device.id) {
             guard lastAttached.contains(device.id) else { continue } // removed by a concurrent rescan
             let startEpoch = epoch
             let generation = generations[device.id, default: 0]
@@ -79,6 +82,7 @@ public actor LocalMTPService: MTPService {
             // Reentrancy: the device may have been unplugged/replugged or the service restarted while opening.
             let current = epoch == startEpoch && lastAttached.contains(device.id)
                 && generations[device.id, default: 0] == generation && workers[device.id] == nil
+                && !ejected.contains(device.id)
             switch result {
             case .success(let opened):
                 guard current else { opened.close(); continue }
@@ -115,6 +119,19 @@ public actor LocalMTPService: MTPService {
         opening.removeAll()
         emit(.interrupted)
         await performScan()
+    }
+
+    public func ejectDevice(_ deviceID: DeviceID) async throws {
+        // Don't join a first scan that is still opening phones: an eject must be able to cancel that very open.
+        if firstScan == nil { await ensureScanned() }
+        let key = key(for: deviceID)
+        guard infos[key] != nil || opening[key] != nil else { throw MTPError.deviceDisconnected }
+        ejected.insert(key)
+        workers.removeValue(forKey: key)?.shutdown(reason: .deviceDisconnected)
+        infos[key] = nil
+        publicIDs[key] = nil
+        log.record("Device ejected", category: "device")
+        emit(.devicesChanged(sortedDevices()))
     }
 
     public func releaseDevice(_ deviceID: DeviceID) async throws {
