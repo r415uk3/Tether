@@ -13,6 +13,7 @@ struct BrowserActions {
     var rename: (() -> Void)?
     var delete: (() -> Void)?
     var eject: (() -> Void)?
+    var find: (() -> Void)?
     var showIcons: (() -> Void)?
     var showList: (() -> Void)?
     var quickLook: (() -> Void)?
@@ -50,6 +51,11 @@ struct BrowserCommands: Commands {
             Button("Eject") { actions?.eject?() }
                 .keyboardShortcut("e")
                 .disabled(actions?.eject == nil)
+        }
+        CommandGroup(after: .textEditing) {
+            Button("Find") { actions?.find?() }
+                .keyboardShortcut("f")
+                .disabled(actions?.find == nil)
         }
         CommandGroup(after: .sidebar) {
             Button("as Icons") { actions?.showIcons?() }
