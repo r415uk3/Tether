@@ -62,7 +62,8 @@ final class QuickLookController: NSObject, QLPreviewPanelDataSource, QLPreviewPa
                         pendingRequest = nil
                         pendingDevice = nil
                         pendingItems = []
-                        onError(MTPError.from(error))
+                        let failure = MTPError.from(error)
+                        if failure != .cancelled { onError(failure) } // a cancelled preview isn't a problem to report
                     }
                     return
                 }

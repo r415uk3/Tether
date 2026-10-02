@@ -39,6 +39,18 @@ public final class AppModel {
         }
     }
 
+    public func activeTransferCount(for deviceID: DeviceID) -> Int {
+        transfers.jobs.filter { $0.isActive && $0.deviceID == deviceID }.count
+    }
+
+    /// Stops this phone's transfers and previews, then ejects it.
+    public func eject(_ deviceID: DeviceID) async -> MTPError? {
+        transfers.cancelAll(deviceID: deviceID)
+        // Only this phone's previews: cancelling another phone's Quick Look download would fail it for no reason.
+        previews.cancelAll(deviceID: deviceID)
+        return await devices.eject(deviceID)
+    }
+
     /// How long the window waits for the first device list before showing the no-phone guide.
     public var initialLoadTimeout: Duration = .seconds(10)
 

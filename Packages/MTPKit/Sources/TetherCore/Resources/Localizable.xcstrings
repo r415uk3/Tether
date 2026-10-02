@@ -96,6 +96,26 @@
         }
       }
     },
+    "Document" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Документ"
+          }
+        }
+      }
+    },
+    "Folder" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Папка"
+          }
+        }
+      }
+    },
     "Keep Both" : {
       "localizations" : {
         "ru" : {

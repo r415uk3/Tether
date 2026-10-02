@@ -74,6 +74,10 @@ public final class XPCMTPService: MTPService, @unchecked Sendable {
         return lines
     }
 
+    public func ejectDevice(_ deviceID: DeviceID) async throws {
+        _ = try await send(.ejectDevice(deviceID: deviceID))
+    }
+
     public func releaseDevice(_ deviceID: DeviceID) async throws {
         _ = try await send(.releaseDevice(deviceID: deviceID))
     }
