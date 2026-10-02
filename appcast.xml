@@ -5,6 +5,15 @@
     <link>https://r415uk3.github.io/Tether/appcast.xml</link>
     <language>en</language>
     <item>
+      <title>Tether 1.0.1</title>
+      <pubDate>Fri, 02 Oct 2026 17:44:36 +0000</pubDate>
+      <sparkle:version>118</sparkle:version>
+      <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <sparkle:fullReleaseNotesLink>https://github.com/r415uk3/Tether/releases/tag/v1.0.1</sparkle:fullReleaseNotesLink>
+      <enclosure url="https://github.com/r415uk3/Tether/releases/download/v1.0.1/Tether-1.0.1.dmg" length="5513478" type="application/octet-stream" sparkle:edSignature="5g3PcEo9SZJlERx5ImB/Rdar1KxznEZCB06LnqSkx6qBVsAZdEI1N2ASr/Jinuyt8njBXXv8fzIdxWM/PWYNAQ=="/>
+    </item>
+    <item>
       <title>Tether 1.0.0</title>
       <pubDate>Fri, 02 Oct 2026 16:11:20 +0000</pubDate>
       <sparkle:version>110</sparkle:version>
