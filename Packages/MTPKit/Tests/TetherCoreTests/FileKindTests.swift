@@ -10,13 +10,14 @@ import MTPKit
     }
 
     @Test func folderIsFolder() {
-        let expected = UTType.folder.localizedDescription ?? String(localized: "Folder", bundle: .module)
+        let expected = FileKind.sentenceCase(UTType.folder.localizedDescription ?? String(localized: "Folder", bundle: .module))
         #expect(FileKind.description(for: entry("DCIM", folder: true)) == expected)
+        #expect(FileKind.description(for: entry("DCIM", folder: true)).first?.isUppercase == true)
     }
 
     @Test func knownExtensionUsesTheSystemDescription() {
-        #expect(FileKind.description(for: entry("IMG_0001.jpg")) == UTType.jpeg.localizedDescription)
-        #expect(FileKind.description(for: entry("notes.TXT")) == UTType.plainText.localizedDescription)
+        #expect(FileKind.description(for: entry("IMG_0001.jpg")) == FileKind.sentenceCase(UTType.jpeg.localizedDescription!))
+        #expect(FileKind.description(for: entry("notes.TXT")) == FileKind.sentenceCase(UTType.plainText.localizedDescription!))
     }
 
     @Test func unknownOrMissingExtensionIsDocument() {
@@ -28,5 +29,24 @@ import MTPKit
     @Test func russianDocumentWord() throws {
         let ru = try russianBundle()
         #expect(ru.localizedString(forKey: "Document", value: "?", table: nil) == "Документ")
+    }
+}
+
+@Suite struct FileKindSentenceCaseTests {
+    @Test func capitalizesALowercaseFirstWord() {
+        #expect(FileKind.sentenceCase("папка") == "Папка")
+        #expect(FileKind.sentenceCase("текст") == "Текст")
+        #expect(FileKind.sentenceCase("изображение JPEG") == "Изображение JPEG")
+    }
+
+    @Test func leavesWordsThatAlreadyHaveCapitalsAlone() {
+        #expect(FileKind.sentenceCase("JPEG image") == "JPEG image")
+        #expect(FileKind.sentenceCase("iCalendar file") == "iCalendar file")
+        #expect(FileKind.sentenceCase("Folder") == "Folder")
+    }
+
+    @Test func handlesEmptyAndNonLetters() {
+        #expect(FileKind.sentenceCase("") == "")
+        #expect(FileKind.sentenceCase("3D model") == "3D model")
     }
 }
