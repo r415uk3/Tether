@@ -5,11 +5,15 @@ import TetherCore
 struct BrowserActions {
     var newFolder: (() -> Void)?
     var refresh: () -> Void
+    var goBack: (() -> Void)?
+    var goForward: (() -> Void)?
     var goUp: (() -> Void)?
     var open: (() -> Void)?
     var download: (() -> Void)?
     var rename: (() -> Void)?
     var delete: (() -> Void)?
+    var eject: (() -> Void)?
+    var find: (() -> Void)?
     var showIcons: (() -> Void)?
     var showList: (() -> Void)?
     var quickLook: (() -> Void)?
@@ -43,6 +47,15 @@ struct BrowserCommands: Commands {
             Button("Delete…") { actions?.delete?() }
                 .keyboardShortcut(.delete, modifiers: .command)
                 .disabled(actions?.delete == nil)
+            Divider()
+            Button("Eject") { actions?.eject?() }
+                .keyboardShortcut("e")
+                .disabled(actions?.eject == nil)
+        }
+        CommandGroup(after: .textEditing) {
+            Button("Find") { actions?.find?() }
+                .keyboardShortcut("f")
+                .disabled(actions?.find == nil)
         }
         CommandGroup(after: .sidebar) {
             Button("as Icons") { actions?.showIcons?() }
@@ -59,6 +72,12 @@ struct BrowserCommands: Commands {
                 .keyboardShortcut(".", modifiers: [.command, .shift])
         }
         CommandMenu("Go") {
+            Button("Back") { actions?.goBack?() }
+                .keyboardShortcut("[")
+                .disabled(actions?.goBack == nil)
+            Button("Forward") { actions?.goForward?() }
+                .keyboardShortcut("]")
+                .disabled(actions?.goForward == nil)
             Button("Enclosing Folder") { actions?.goUp?() }
                 .keyboardShortcut(.upArrow, modifiers: .command)
                 .disabled(actions?.goUp == nil)

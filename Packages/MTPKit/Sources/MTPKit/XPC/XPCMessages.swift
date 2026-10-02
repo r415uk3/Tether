@@ -22,6 +22,7 @@ enum XPCRequest: Codable, Sendable, Equatable {
     case cancel(jobID: UUID)
     case thumbnail(objectID: UInt32, folder: FolderRef)
     case releaseDevice(deviceID: DeviceID)
+    case ejectDevice(deviceID: DeviceID)
     case diagnostics
 }
 

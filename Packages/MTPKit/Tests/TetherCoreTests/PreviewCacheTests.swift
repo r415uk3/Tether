@@ -113,6 +113,23 @@ import MTPKit
         #expect(FileManager.default.fileExists(atPath: url.path))
     }
 
+    @Test func cancelAllForOneDeviceLeavesTheOtherDevicesPreviewRunning() async throws {
+        let other = FakeDevice(id: "p2", chunkSize: 1024, chunkDelay: 0.02)
+        let bigOne = device.addFile("one.bin", data: Data(count: 20 * 1024)) // ~0.4 s
+        let bigTwo = other.addFile("two.bin", data: Data(count: 20 * 1024))
+        provider.attach(other)
+        let (cache, _) = try await makeCache()
+        let first = Task { try await cache.file(for: bigOne, deviceID: "p1") }
+        let second = Task { try await cache.file(for: bigTwo, deviceID: "p2") }
+        try await eventually { cache.isDownloading(deviceID: "p1") && cache.isDownloading(deviceID: "p2") }
+        cache.cancelAll(deviceID: "p1")
+        #expect(!cache.isDownloading(deviceID: "p1"))
+        #expect(cache.isDownloading(deviceID: "p2"))
+        await #expect(throws: (any Error).self) { try await first.value }
+        let url = try await second.value // the other phone's preview finishes
+        #expect(try Data(contentsOf: url).count == 20 * 1024)
+    }
+
     @Test func progressTracksTheRunningDownload() async throws {
         let file = device.addFile("a.bin", data: Data(count: 10 * 1024)) // ~0.2 s
         provider.attach(device)

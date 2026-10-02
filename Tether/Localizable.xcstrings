@@ -63,6 +63,58 @@
         }
       }
     },
+    "%lld transfers will stop." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld transfer will stop."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld transfers will stop."
+                }
+              }
+            }
+          }
+        },
+        "ru" : {
+          "variations" : {
+            "plural" : {
+              "few" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld передачи будут остановлены."
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld передач будут остановлены."
+                }
+              },
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld передача будет остановлена."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld передачи будут остановлены."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "An item named “%@” already exists in this folder." : {
       "localizations" : {
         "ru" : {
@@ -479,6 +531,36 @@
         }
       }
     },
+    "Eject" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Извлечь"
+          }
+        }
+      }
+    },
+    "Eject %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Извлечь %@"
+          }
+        }
+      }
+    },
+    "Eject “%@”?" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Извлечь «%@»?"
+          }
+        }
+      }
+    },
     "Empty Folder" : {
       "localizations" : {
         "ru" : {
@@ -515,6 +597,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Передача файлов"
+          }
+        }
+      }
+    },
+    "Find" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Найти"
+          }
+        }
+      }
+    },
+    "Forward" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вперёд"
           }
         }
       }
@@ -575,6 +677,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Оставить оба"
+          }
+        }
+      }
+    },
+    "Kind" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тип"
           }
         }
       }
@@ -805,6 +917,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Повторить %@"
+          }
+        }
+      }
+    },
+    "Search in This Folder" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поиск в этой папке"
           }
         }
       }

@@ -44,6 +44,27 @@ final class TetherUITests: XCTestCase {
         XCTAssertTrue(cell("notes.txt").waitForExistence(timeout: 10), "Pixel 9's root folder didn't load")
     }
 
+    func testEject() {
+        launchToRoot()
+        app.outlines["sidebar"].buttons["Eject Pixel 9"].click()
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: app.outlines["sidebar"].staticTexts["Pixel 9"])
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.outlines["sidebar"].staticTexts["Galaxy S25"].exists, "the other phone must stay")
+    }
+
+    func testBackAndForward() {
+        launchToRoot()
+        cell("DCIM").doubleClick()
+        XCTAssertTrue(cell("Camera").waitForExistence(timeout: 5))
+        app.typeKey("[", modifierFlags: .command)
+        XCTAssertTrue(cell("notes.txt").waitForExistence(timeout: 5))
+        app.typeKey("]", modifierFlags: .command)
+        XCTAssertTrue(cell("Camera").waitForExistence(timeout: 5))
+        cell("Camera").doubleClick()   // navigating after a round trip still uses live handles
+        XCTAssertTrue(cell("IMG_0001.jpg").waitForExistence(timeout: 5))
+    }
+
     func testBrowse() {
         launchToRoot()
         cell("DCIM").doubleClick()
@@ -140,5 +161,47 @@ final class TetherUITests: XCTestCase {
         }
         XCTAssertFalse(app.toolbars.buttons["Transfers"].exists, "English Transfers button is still shown")
         XCTAssertTrue(app.staticTexts["4 объекта"].exists, "Window subtitle isn't the Russian item count")
+        XCTAssertTrue(table.buttons["Тип"].exists || table.staticTexts["Тип"].exists, "Kind column header isn't Russian")
+    }
+
+    func testSearchFiltersTheFolder() {
+        launchToRoot()
+        app.typeKey("f", modifierFlags: .command)
+        app.typeText("note")
+        XCTAssertTrue(cell("notes.txt").waitForExistence(timeout: 5))
+        XCTAssertFalse(cell("DCIM").exists)
+        cell("notes.txt").click()   // search keeps working with the table
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
+    func testCommandEInTheSearchFieldDoesNotEject() {
+        launchToRoot()
+        app.typeKey("f", modifierFlags: .command)
+        app.typeText("note")
+        XCTAssertTrue(cell("notes.txt").waitForExistence(timeout: 5))
+        app.typeKey("e", modifierFlags: .command) // "Use Selection for Find" in a text field, not Eject
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        XCTAssertTrue(app.outlines["sidebar"].staticTexts["Pixel 9"].exists, "⌘E in the search field ejected the phone")
+    }
+
+    func testNewFolderDuringSearchClearsItAndRenamesInline() {
+        launchToRoot()
+        app.typeKey("f", modifierFlags: .command)
+        app.typeText("zzz")
+        XCTAssertTrue(cell("notes.txt").waitForNonExistence(timeout: 5))
+        app.typeKey("n", modifierFlags: [.command, .shift]) // File ▸ New Folder
+        // While its inline rename is open, the name is an editable text field.
+        XCTAssertTrue(table.textFields["untitled folder"].waitForExistence(timeout: 5),
+                      "the new folder is hidden by the search, or its inline rename didn't start")
+        XCTAssertTrue(cell("notes.txt").exists, "the search wasn't cleared")
+        app.typeKey("a", modifierFlags: .command)
+        app.typeText("Made\n")
+        XCTAssertTrue(cell("Made").waitForExistence(timeout: 5), "the inline rename didn't commit")
+    }
+
+    func testKindColumn() {
+        launchToRoot()
+        XCTAssertTrue(table.buttons["Kind"].exists || table.staticTexts["Kind"].exists, "Kind column header missing")
+        XCTAssertTrue(table.staticTexts.matching(NSPredicate(format: "value ==[c] %@ OR label ==[c] %@", "Folder", "Folder")).firstMatch.exists)
     }
 }

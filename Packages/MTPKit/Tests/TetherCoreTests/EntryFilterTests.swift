@@ -20,4 +20,34 @@ import MTPKit
                                      defaultChoice: nil) { _ in asked = true; return .init(choice: .skip, applyToAll: false) }
         #expect(asked)
     }
+
+    private func entry(_ name: String, id: UInt32) -> FileEntry {
+        FileEntry(objectID: id, parentID: FileEntry.rootID, storageID: 1, name: name,
+                  size: 0, modified: nil, isFolder: false)
+    }
+
+    @Test func searchIgnoresCaseAndDiacritics() {
+        let entries = ["Фото.JPG", "Café.png", "notes.txt"].enumerated().map { entry($0.element, id: UInt32($0.offset)) }
+        #expect(EntryFilter.matching(entries, query: "фото").map(\.name) == ["Фото.JPG"])
+        #expect(EntryFilter.matching(entries, query: "cafe").map(\.name) == ["Café.png"])
+        #expect(EntryFilter.matching(entries, query: "  NOTES ").map(\.name) == ["notes.txt"])
+    }
+
+    @Test func blankQueryShowsAll() {
+        let entries = [entry("a", id: 1), entry("b", id: 2)]
+        #expect(EntryFilter.matching(entries, query: "").count == 2)
+        #expect(EntryFilter.matching(entries, query: "   ").count == 2)
+    }
+
+    @Test func isSearchingIgnoresWhitespaceAndNewlines() {
+        #expect(!EntryFilter.isSearching(""))
+        #expect(!EntryFilter.isSearching(" \n\t "))
+        #expect(EntryFilter.isSearching(" a\n"))
+        #expect(EntryFilter.matching([entry("a", id: 1), entry("b", id: 2)], query: "\n").count == 2)
+    }
+
+    @Test func searchMatchesAnywhereInTheName() {
+        let entries = [entry("IMG_0012.jpg", id: 1), entry("Download", id: 2)]
+        #expect(EntryFilter.matching(entries, query: "0012").map(\.name) == ["IMG_0012.jpg"])
+    }
 }

@@ -15,6 +15,15 @@ import MTPKit
         return (DeviceStore(service: service), service)
     }
 
+    @Test func ejectReloadsDevices() async throws {
+        let (store, _) = makeStore()
+        await store.reloadDevices()
+        #expect(store.devices.map(\.id) == ["p1"])
+        let error = await store.eject("p1")
+        #expect(error == nil)
+        #expect(store.devices.isEmpty)
+    }
+
     @Test func hasLoadedFlipsAfterTheFirstReload() async throws {
         let (store, _) = makeStore()
         #expect(!store.hasLoaded)
@@ -300,6 +309,7 @@ private final class FlakyService: MTPService, @unchecked Sendable {
     }
     func storages(deviceID: DeviceID) async throws -> [StorageInfo] { try await base.storages(deviceID: deviceID) }
     func releaseDevice(_ deviceID: DeviceID) async throws { try await base.releaseDevice(deviceID) }
+    func ejectDevice(_ deviceID: DeviceID) async throws { try await base.ejectDevice(deviceID) }
     func diagnostics() async throws -> [String] { try await base.diagnostics() }
     func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
         try await base.thumbnail(objectID: objectID, in: folder)

@@ -5,7 +5,7 @@ import TetherCore
 struct BrowserView: View {
     @Environment(AppModel.self) private var model
     let selection: StorageSelection
-    @State private var path: [FileEntry] = []
+    @State private var history = NavigationHistory(start: [FileEntry]())
     /// The connection session `path` was built in; its handles mean nothing in any other session.
     @State private var pathSession: UUID?
     @State private var selectedIDs: Set<UInt32> = []
@@ -17,9 +17,15 @@ struct BrowserView: View {
     /// Folder the pending delete was requested in (navigating before confirming must not retarget it).
     @State private var pendingDeleteFolder: FolderRef?
     @State private var problem: String?
+    @State private var confirmingEject = false
+    @State private var ejectTransferCount = 0
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
     @AppStorage(SettingsKey.viewMode) private var viewMode = BrowserViewMode.list
     @State private var renamingEntry: FileEntry?
+    @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
+
+    private var path: [FileEntry] { history.current }
 
     private var session: UUID? { model.devices.session(for: selection.deviceID) }
 
@@ -35,7 +41,9 @@ struct BrowserView: View {
 
     /// Every entry, hidden ones included (used for name-clash checks).
     private var allEntries: [FileEntry] { model.devices.listings[folder]?.entries ?? [] }
-    private var visibleEntries: [FileEntry] { EntryFilter.visible(allEntries, showHidden: showHiddenFiles) }
+    private var visibleEntries: [FileEntry] {
+        EntryFilter.matching(EntryFilter.visible(allEntries, showHidden: showHiddenFiles), query: searchText)
+    }
     private var selectedEntries: [FileEntry] { visibleEntries.filter { selectedIDs.contains($0.objectID) } }
 
     var body: some View {
@@ -58,11 +66,19 @@ struct BrowserView: View {
             .overlay { overlay(for: listing) }
             .navigationTitle(title)
             .navigationSubtitle(subtitle(for: listing))
+            .toolbarTitleMenu { pathMenu }
+            .searchable(text: $searchText, placement: .toolbar, prompt: Text("Search in This Folder"))
+            .searchFocused($searchFocused)
             .toolbar {
                 ToolbarItem(placement: .navigation) {
-                    Button(action: goUp) { Label("Back", systemImage: "chevron.left") }
-                        .help("Back")
-                        .disabled(path.isEmpty || isEditingName)
+                    ControlGroup {
+                        Button(action: goBack) { Label("Back", systemImage: "chevron.left") }
+                            .help("Back")
+                            .disabled(!history.canGoBack || isEditingName)
+                        Button(action: goForward) { Label("Forward", systemImage: "chevron.right") }
+                            .help("Forward")
+                            .disabled(!history.canGoForward || isEditingName)
+                    }
                 }
                 ToolbarItem {
                     Picker("View", selection: $viewMode) {
@@ -89,10 +105,12 @@ struct BrowserView: View {
                 QuickLookController.shared.invalidate()
                 selectedIDs = []
                 renameRequest = nil
+                searchText = ""
             }
             .onChange(of: session) {
                 QuickLookController.shared.invalidate()
-                path = []
+                history.reset(to: [])
+                searchText = ""
             }
             .onChange(of: selectedIDs) {
                 if QuickLookController.shared.isVisible { showQuickLook(selectedEntries) }
@@ -110,6 +128,7 @@ struct BrowserView: View {
             } message: {
                 Text("This can’t be undone.")
             }
+            .modifier(EjectDialog(deviceID: selection.deviceID, transferCount: ejectTransferCount, isPresented: $confirmingEject))
             .alert(String(localized: "The Operation Couldn’t Be Completed"), isPresented: isShowingProblem) {
                 Button(String(localized: "OK")) {}
             } message: {
@@ -135,6 +154,9 @@ struct BrowserView: View {
             } actions: {
                 Button("Try Again", action: refresh)
             }
+        } else if visibleEntries.isEmpty && EntryFilter.isSearching(searchText) {
+            ContentUnavailableView.search(text: searchText)
+                .allowsHitTesting(false) // drops still reach the table underneath
         } else if visibleEntries.isEmpty {
             ContentUnavailableView("Empty Folder", systemImage: "folder",
                                    description: Text("Drop files here to copy them to the phone."))
@@ -167,6 +189,8 @@ struct BrowserView: View {
         let editing = isEditingName
         // Navigating away mid-rename would discard the typed name.
         let goUpAction: (() -> Void)? = path.isEmpty || editing ? nil : { goUp() }
+        let goBackAction: (() -> Void)? = history.canGoBack && !editing ? { goBack() } : nil
+        let goForwardAction: (() -> Void)? = history.canGoForward && !editing ? { goForward() } : nil
         let openAction: (() -> Void)? =
             selected.count == 1 && selected[0].isFolder && !editing ? { open(selected[0]) } : nil
         let downloadAction: (() -> Void)? = selected.isEmpty ? nil : { download(selected) }
@@ -178,9 +202,13 @@ struct BrowserView: View {
         let newFolderAction: (() -> Void)? = editing ? nil : { newFolder() }
         let showIconsAction: (() -> Void)? = editing ? nil : { viewMode = .icons }
         let showListAction: (() -> Void)? = editing ? nil : { viewMode = .list }
+        // ⌘E is also the system's "Use Selection for Find": typing in the search field must never eject the phone.
+        let ejectAction: (() -> Void)? = editing || searchFocused || model.devices.ejecting.contains(selection.deviceID)
+            ? nil : { requestEject() }
+        let findAction: (() -> Void)? = editing ? nil : { searchFocused = true }
         return BrowserActions(
-            newFolder: newFolderAction, refresh: refresh, goUp: goUpAction, open: openAction,
-            download: downloadAction, rename: renameAction, delete: deleteAction,
+            newFolder: newFolderAction, refresh: refresh, goBack: goBackAction, goForward: goForwardAction, goUp: goUpAction, open: openAction,
+            download: downloadAction, rename: renameAction, delete: deleteAction, eject: ejectAction, find: findAction,
             showIcons: showIconsAction, showList: showListAction, quickLook: quickLookAction)
     }
 
@@ -195,8 +223,32 @@ struct BrowserView: View {
         return String(localized: "\(visibleEntries.count) items")
     }
 
+    private func requestEject() {
+        let id = selection.deviceID
+        let count = model.activeTransferCount(for: id)
+        if count > 0 { ejectTransferCount = count; confirmingEject = true } else { Task { _ = await model.eject(id) } }
+    }
+
     private func goUp() {
-        if !path.isEmpty { path.removeLast() }
+        if !path.isEmpty { history.visit(Array(path.dropLast())) }
+    }
+
+    private func goBack() { history.goBack() }
+
+    private func goForward() { history.goForward() }
+
+    @ViewBuilder private var pathMenu: some View {
+        if let storageName = model.devices.storage(for: folder)?.name {
+            Button { history.visit([]) } label: { Text(verbatim: storageName) }
+                .disabled(isEditingName)
+        } else {
+            Button("Phone") { history.visit([]) }
+                .disabled(isEditingName)
+        }
+        ForEach(Array(path.dropLast().enumerated()), id: \.offset) { index, entry in
+            Button { history.visit(Array(path.prefix(index + 1))) } label: { Text(verbatim: entry.name) }
+                .disabled(isEditingName) // navigating away mid-rename would discard the typed name
+        }
     }
 
     private func refresh() {
@@ -207,7 +259,7 @@ struct BrowserView: View {
     private func open(_ entry: FileEntry) {
         if entry.isFolder {
             pathSession = session
-            path.append(entry)
+            history.visit(path + [entry])
         } else {
             showQuickLook([entry]) // double-click replaces the preview; it never closes the panel
         }
@@ -226,6 +278,8 @@ struct BrowserView: View {
     }
 
     private func newFolder() {
+        // A search would hide the new folder and defer its inline rename until the search is cleared.
+        searchText = ""
         let name = NameValidation.newFolderName(siblings: allEntries)
         let folder = self.folder
         Task {
@@ -333,5 +387,21 @@ struct BrowserView: View {
 
     private var isShowingProblem: Binding<Bool> {
         Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })
+    }
+}
+
+/// Shows the shared eject confirmation for the phone this browser belongs to.
+private struct EjectDialog: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let deviceID: DeviceID
+    let transferCount: Int
+    @Binding var isPresented: Bool
+
+    func body(content: Content) -> some View {
+        if let device = model.devices.devices.first(where: { $0.id == deviceID }) {
+            content.ejectConfirmation(for: device, transferCount: transferCount, isPresented: $isPresented)
+        } else {
+            content
+        }
     }
 }
