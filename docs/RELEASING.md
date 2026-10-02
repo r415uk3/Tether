@@ -8,8 +8,8 @@ ad-hoc-signed DMG, signs it with the Sparkle EdDSA key, creates the GitHub Relea
 
 - **Sparkle key pair.** The private half lives only in the maintainer's login keychain and in the
   `SPARKLE_ED_PRIVATE_KEY` GitHub Actions secret. It is never committed. The public half is
-  `SPARKLE_PUBLIC_KEY` in `project.yml` (injected as `SUPublicEDKey`). **It is a placeholder
-  (`REPLACE_IN_TASK_5`) until the real key is generated and committed in Task 5.**
+  `SPARKLE_PUBLIC_KEY` in `project.yml` (injected as `SUPublicEDKey`). The release workflow refuses to
+  publish unless it decodes to a 32-byte key, and checks each signature against it.
 - **Generate the real key** (once, on the maintainer's Mac). Find the tools in the resolved Sparkle package:
   `DerivedData/release/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys` (exact path, after a release
   build; do not use `find`, the package also ships older DSA scripts).
@@ -18,12 +18,14 @@ ad-hoc-signed DMG, signs it with the Sparkle EdDSA key, creates the GitHub Relea
   GK=DerivedData/release/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys
   "$GK"                 # creates the key in the keychain, prints the public key
   "$GK" -p              # print the public key again later
-  KEYFILE=$(mktemp)
-  "$GK" -x "$KEYFILE"   # export the private key to the temp file
+  KEYDIR=$(mktemp -d)   # a directory: `-x` refuses to overwrite an existing file (mktemp creates one)
+  "$GK" -x "$KEYDIR/key"   # export the private key
+  wc -c < "$KEYDIR/key"    # must not be 0
   ```
 
   Put the public key into `project.yml` (`SPARKLE_PUBLIC_KEY`). Load the exported file into the secret
-  (`gh secret set SPARKLE_ED_PRIVATE_KEY < "$KEYFILE"`), then delete it (`rm -P "$KEYFILE"`).
+  (`gh secret set SPARKLE_ED_PRIVATE_KEY < "$KEYDIR/key"`), then delete it
+  (`rm -P "$KEYDIR/key" && rmdir "$KEYDIR"`).
   Changing the key later breaks updates for every installed copy, so keep a backup of the export offline.
 - **Export format (confirmed).** For keys in the current format, `generate_keys -x` writes the base64 encoding
   of the 32-byte Ed25519 seed (per its `--help`). `sign_update --ed-key-file <file>` (`-f`) takes exactly that, and
