@@ -14,6 +14,7 @@ struct SidebarView: View {
                     case .ready:
                         Label(device.displayName, systemImage: "smartphone")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                         ForEach(model.devices.storages[device.id] ?? []) { storage in
                             StorageRow(storage: storage)
                                 .tag(StorageSelection(deviceID: device.id, storageID: storage.id))
@@ -21,18 +22,20 @@ struct SidebarView: View {
                     case .unavailable(let error):
                         VStack(alignment: .leading, spacing: 2) {
                             Label(device.displayName, systemImage: "smartphone")
+                                .accessibilityAddTraits(.isHeader)
                             Text(error.localizedDescription)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                             if error == .claimedByOtherProcess {
-                                ReleaseButton(deviceID: device.id)
+                                ReleaseButton(deviceID: device.id, name: device.displayName)
                             }
                         }
                     }
                 }
             }
         }
+        .accessibilityIdentifier("sidebar")
         .navigationSplitViewColumnWidth(min: 190, ideal: 230)
     }
 }
@@ -40,11 +43,13 @@ struct SidebarView: View {
 private struct ReleaseButton: View {
     @Environment(AppModel.self) private var model
     let deviceID: DeviceID
+    let name: String
 
     var body: some View {
         Button("Release") { Task { _ = await model.devices.release(deviceID) } }
             .controlSize(.small)
             .disabled(model.devices.releasing.contains(deviceID))
+            .accessibilityLabel(String(localized: "Release \(name)"))
         if model.devices.releaseErrors[deviceID] != nil {
             Text("Still held. Quit Image Capture and Photos.")
                 .font(.caption)
@@ -69,5 +74,7 @@ private struct StorageRow: View {
             }
         }
         .padding(.leading, 12)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(AccessibilityText.storage(storage))
     }
 }

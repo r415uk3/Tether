@@ -36,8 +36,7 @@ final class LibMTPProvider: DeviceProvider, @unchecked Sendable {
         guard var r = lock.withLock({ raw[device.id] }) else { throw MTPError.deviceDisconnected }
         guard let handle = LIBMTP_Open_Raw_Device_Uncached(&r) else {
             if !ImageCaptureAgent.runningProcessIDs().isEmpty { throw MTPError.claimedByOtherProcess }
-            throw MTPError.underlying(code: -7, message: String(
-                localized: "Tether couldn’t connect to the phone. Unplug it, plug it back in, and choose “File transfer”."))
+            throw MTPError.underlying(code: -7, message: "Couldn't open the device.")
         }
         let opened = LibMTPDevice(handle: handle, attached: device)
         // A locked Android phone opens but exposes no storage until unlocked.

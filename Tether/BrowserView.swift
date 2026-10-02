@@ -61,6 +61,7 @@ struct BrowserView: View {
             .toolbar {
                 ToolbarItem(placement: .navigation) {
                     Button(action: goUp) { Label("Back", systemImage: "chevron.left") }
+                        .help("Back")
                         .disabled(path.isEmpty || isEditingName)
                 }
                 ToolbarItem {
@@ -72,15 +73,15 @@ struct BrowserView: View {
                     .disabled(isEditingName)
                     .help("Show items as icons or as a list")
                 }
-                ToolbarItem {
+                TetherToolbarSpacer()
+                ToolbarItemGroup {
                     Button(action: refresh) { Label("Refresh", systemImage: "arrow.clockwise") }
-                }
-                ToolbarItem {
+                        .help("Refresh")
                     Button(action: newFolder) { Label("New Folder", systemImage: "folder.badge.plus") }
+                        .help("New Folder")
                         .disabled(isEditingName)
-                }
-                ToolbarItem {
                     Button(action: chooseFilesToUpload) { Label("Upload", systemImage: "square.and.arrow.up") }
+                        .help("Upload")
                 }
             }
             .task(id: folder) { await model.devices.refresh(folder) }
@@ -189,7 +190,9 @@ struct BrowserView: View {
         if let fraction = model.previews.progress {
             return String(localized: "Preparing preview… \(Int(fraction * 100))%")
         }
-        return listing?.isUpdating == true ? String(localized: "Updating…") : ""
+        if listing?.isUpdating == true { return String(localized: "Updating…") }
+        guard let listing, listing.error == nil || !listing.entries.isEmpty else { return "" }
+        return String(localized: "\(visibleEntries.count) items")
     }
 
     private func goUp() {

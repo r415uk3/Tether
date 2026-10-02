@@ -17,16 +17,18 @@ struct NoPhoneView: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier("noPhoneView")
     }
 
     private func step(_ number: Int, _ text: LocalizedStringKey) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text("\(number)")
+            Text(number, format: .number)
                 .font(.callout.bold())
                 .frame(width: 22, height: 22)
                 .background(Circle().fill(.tint.opacity(0.2)))
             Text(text)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -44,8 +46,7 @@ private struct USBNotificationMock: View {
         }
         .padding(14)
         .frame(width: 260, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(.background.secondary))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(.separator))
+        .tetherCard()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Example: in the phone’s USB notification, File transfer is selected.")
     }

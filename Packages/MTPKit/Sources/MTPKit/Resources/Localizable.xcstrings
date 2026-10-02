@@ -1,0 +1,174 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "An item named “%@” already exists in this folder." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "В этой папке уже есть объект «%@»."
+          }
+        }
+      }
+    },
+    "Another app is using the phone. Quit Image Capture or Photos and try again." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Телефон использует другое приложение. Закройте «Захват изображений» или «Фото» и повторите попытку."
+          }
+        }
+      }
+    },
+    "Not enough space on the phone. Needs %@, but only %@ is available." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Not enough space on the phone. Needs %1$@, but only %2$@ is available."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Недостаточно места на телефоне. Нужно %@, а доступно только %@."
+          }
+        }
+      }
+    },
+    "Something went wrong while talking to the phone. Try again, or reconnect it." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось связаться с телефоном. Повторите попытку или переподключите его."
+          }
+        }
+      }
+    },
+    "Tether couldn’t open the phone. Unplug it, plug it back in, and choose “File transfer”." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tether не удалось открыть телефон. Отключите его, подключите снова и выберите «Передача файлов»."
+          }
+        }
+      }
+    },
+    "The connection to the phone was interrupted." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Связь с телефоном прервалась."
+          }
+        }
+      }
+    },
+    "The item no longer exists on the phone." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этого объекта больше нет на телефоне."
+          }
+        }
+      }
+    },
+    "The new “%@” was copied as “%@” but couldn’t be renamed. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The new “%1$@” was copied as “%2$@” but couldn’t be renamed. %3$@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Новый объект «%@» скопирован как «%@», но его не удалось переименовать. %@"
+          }
+        }
+      }
+    },
+    "The new “%@” was copied as “%@”, but the existing item couldn’t be removed. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The new “%1$@” was copied as “%2$@”, but the existing item couldn’t be removed. %3$@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Новый объект «%@» скопирован как «%@», но существующий объект не удалось удалить. %@"
+          }
+        }
+      }
+    },
+    "The phone is busy. Try again in a moment." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Телефон занят. Повторите попытку через минуту."
+          }
+        }
+      }
+    },
+    "The phone stopped responding." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Телефон перестал отвечать."
+          }
+        }
+      }
+    },
+    "The phone was disconnected." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Телефон отключён."
+          }
+        }
+      }
+    },
+    "The phone was reconnected. Upload the item again from its folder." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Телефон был переподключён. Загрузите объект заново из его папки."
+          }
+        }
+      }
+    },
+    "The transfer was cancelled." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Передача отменена."
+          }
+        }
+      }
+    },
+    "Unlock your phone and choose “File transfer” in the USB notification." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Разблокируйте телефон и выберите «Передача файлов» в уведомлении USB."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

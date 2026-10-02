@@ -39,12 +39,21 @@ public final class AppModel {
         }
     }
 
+    /// How long the window waits for the first device list before showing the no-phone guide.
+    public var initialLoadTimeout: Duration = .seconds(10)
+
     public func start() async {
         await service.setEventHandler { [weak self] event in
             Task { @MainActor in self?.handle(event) }
         }
-        await devices.reloadDevices()
+        let timeout = initialLoadTimeout
+        let timer = Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            self?.devices.markLoaded()
+        }
         transfers.startWatchdog()
+        await devices.reloadDevices()
+        timer.cancel()
     }
 
     func handle(_ event: ServiceEvent) {

@@ -196,7 +196,7 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         case LIBMTP_ERROR_CANCELLED: return .cancelled
         case LIBMTP_ERROR_NO_DEVICE_ATTACHED, LIBMTP_ERROR_USB_LAYER: return .deviceDisconnected
         case LIBMTP_ERROR_STORAGE_FULL: return .storageFull(needed: 0, available: 0)
-        default: return .underlying(code: Int(last.number.rawValue), message: last.text)
+        default: return .underlying(code: MTPError.libmtpCode(Int(last.number.rawValue)), message: last.text)
         }
     }
 }

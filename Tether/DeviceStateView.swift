@@ -17,6 +17,7 @@ struct DeviceStateView: View {
                     Text(error.localizedDescription)
                 } actions: {
                     Button("Try Again") { Task { await model.devices.retryStorages(device.id) } }
+                        .tetherProminentButton()
                 }
             } else if let list = model.devices.storages[device.id], list.isEmpty {
                 ContentUnavailableView {
@@ -25,6 +26,7 @@ struct DeviceStateView: View {
                     Text("Unlock the phone and check that USB is set to File Transfer.")
                 } actions: {
                     Button("Try Again") { Task { await model.devices.retryStorages(device.id) } }
+                        .tetherProminentButton()
                 }
             } else {
                 ProgressView("Reading your phone…")
@@ -46,6 +48,7 @@ struct DeviceStateView: View {
                     Task { _ = await model.devices.release(device.id) }
                 }
                 .disabled(releasing)
+                .tetherProminentButton()
             }
         case .unavailable(.deviceLocked):
             ContentUnavailableView {

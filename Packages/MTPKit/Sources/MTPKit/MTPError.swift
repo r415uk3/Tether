@@ -14,6 +14,14 @@ public enum MTPError: Error, Codable, Hashable, Sendable {
     case phoneReconnected
     case underlying(code: Int, message: String)
 
+    /// `.underlying` code ranges:
+    /// - -1...-7: helper/Tether-internal (-1 out of memory/unknown, -2 unexpected response, -3 bad upload path,
+    ///   -4...-6 already-localized Tether messages, -7 couldn't open the device).
+    /// - -101 and below: a libmtp error number N, as `libmtpCode(N)` (= -100 - N). Raw libmtp text is English,
+    ///   so these get the generic friendly message; the number stays visible in `logDescription`.
+    /// - 0 and above: NSError-style codes whose localized message is passed through.
+    public static func libmtpCode(_ raw: Int) -> Int { -100 - raw }
+
     public static let unexpectedResponse = MTPError.underlying(code: -2, message: "Unexpected response from MTPHelper.")
 
     public static func from(_ error: Error) -> MTPError {
@@ -27,27 +35,32 @@ extension MTPError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .deviceDisconnected:
-            String(localized: "The phone was disconnected.")
+            String(localized: "The phone was disconnected.", bundle: .module)
         case .deviceLocked:
-            String(localized: "Unlock your phone and choose “File transfer” in the USB notification.")
+            String(localized: "Unlock your phone and choose “File transfer” in the USB notification.", bundle: .module)
         case .deviceBusy:
-            String(localized: "The phone is busy. Try again in a moment.")
+            String(localized: "The phone is busy. Try again in a moment.", bundle: .module)
         case .claimedByOtherProcess:
-            String(localized: "Another app is using the phone. Quit Image Capture or Photos and try again.")
+            String(localized: "Another app is using the phone. Quit Image Capture or Photos and try again.", bundle: .module)
         case .storageFull(let needed, let available):
-            String(localized: "Not enough space on the phone. Needs \(Self.bytes(needed)), but only \(Self.bytes(available)) is available.")
+            String(localized: "Not enough space on the phone. Needs \(Self.bytes(needed)), but only \(Self.bytes(available)) is available.", bundle: .module)
         case .nameConflict(let name):
-            String(localized: "An item named “\(name)” already exists in this folder.")
+            String(localized: "An item named “\(name)” already exists in this folder.", bundle: .module)
         case .notFound:
-            String(localized: "The item no longer exists on the phone.")
+            String(localized: "The item no longer exists on the phone.", bundle: .module)
         case .timeout:
-            String(localized: "The phone stopped responding.")
+            String(localized: "The phone stopped responding.", bundle: .module)
         case .cancelled:
-            String(localized: "The transfer was cancelled.")
+            String(localized: "The transfer was cancelled.", bundle: .module)
         case .serviceInterrupted:
-            String(localized: "The connection to the phone was interrupted.")
+            String(localized: "The connection to the phone was interrupted.", bundle: .module)
         case .phoneReconnected:
-            String(localized: "The phone was reconnected. Upload the item again from its folder.")
+            String(localized: "The phone was reconnected. Upload the item again from its folder.", bundle: .module)
+        case .underlying(-7, _):
+            String(localized: "Tether couldn’t open the phone. Unplug it, plug it back in, and choose “File transfer”.", bundle: .module)
+        // -4...-6 carry already-localized messages built by Tether itself; other negative codes are helper-internal English text.
+        case .underlying(let code, _) where code < 0 && !(-6 ... -4).contains(code):
+            String(localized: "Something went wrong while talking to the phone. Try again, or reconnect it.", bundle: .module)
         case .underlying(_, let message):
             message
         }

@@ -210,8 +210,7 @@ public final class TransferQueue {
     }
 
     private static var staleUploadError: MTPError {
-        .underlying(code: -6, message: String(
-            localized: "The phone was reconnected, so this folder may have changed. Upload the item again."))
+        .underlying(code: -6, message: String(localized: "The phone was reconnected, so this folder may have changed. Upload the item again.", bundle: .module))
     }
 
     private func finish(_ i: Int, _ state: State) {
