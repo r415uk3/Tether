@@ -39,6 +39,13 @@ import MTPKit
         #expect(EntryFilter.matching(entries, query: "   ").count == 2)
     }
 
+    @Test func isSearchingIgnoresWhitespaceAndNewlines() {
+        #expect(!EntryFilter.isSearching(""))
+        #expect(!EntryFilter.isSearching(" \n\t "))
+        #expect(EntryFilter.isSearching(" a\n"))
+        #expect(EntryFilter.matching([entry("a", id: 1), entry("b", id: 2)], query: "\n").count == 2)
+    }
+
     @Test func searchMatchesAnywhereInTheName() {
         let entries = [entry("IMG_0012.jpg", id: 1), entry("Download", id: 2)]
         #expect(EntryFilter.matching(entries, query: "0012").map(\.name) == ["IMG_0012.jpg"])

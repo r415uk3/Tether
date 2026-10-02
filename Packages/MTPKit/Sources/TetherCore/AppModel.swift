@@ -46,8 +46,8 @@ public final class AppModel {
     /// Stops this phone's transfers and previews, then ejects it.
     public func eject(_ deviceID: DeviceID) async -> MTPError? {
         transfers.cancelAll(deviceID: deviceID)
-        // Cancels every preview download, not just this phone's: only one Quick Look panel exists.
-        previews.cancelAll()
+        // Only this phone's previews: cancelling another phone's Quick Look download would fail it for no reason.
+        previews.cancelAll(deviceID: deviceID)
         return await devices.eject(deviceID)
     }
 

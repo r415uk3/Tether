@@ -174,6 +174,31 @@ final class TetherUITests: XCTestCase {
         app.typeKey(.escape, modifierFlags: [])
     }
 
+    func testCommandEInTheSearchFieldDoesNotEject() {
+        launchToRoot()
+        app.typeKey("f", modifierFlags: .command)
+        app.typeText("note")
+        XCTAssertTrue(cell("notes.txt").waitForExistence(timeout: 5))
+        app.typeKey("e", modifierFlags: .command) // "Use Selection for Find" in a text field, not Eject
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        XCTAssertTrue(app.outlines["sidebar"].staticTexts["Pixel 9"].exists, "⌘E in the search field ejected the phone")
+    }
+
+    func testNewFolderDuringSearchClearsItAndRenamesInline() {
+        launchToRoot()
+        app.typeKey("f", modifierFlags: .command)
+        app.typeText("zzz")
+        XCTAssertTrue(cell("notes.txt").waitForNonExistence(timeout: 5))
+        app.typeKey("n", modifierFlags: [.command, .shift]) // File ▸ New Folder
+        // While its inline rename is open, the name is an editable text field.
+        XCTAssertTrue(table.textFields["untitled folder"].waitForExistence(timeout: 5),
+                      "the new folder is hidden by the search, or its inline rename didn't start")
+        XCTAssertTrue(cell("notes.txt").exists, "the search wasn't cleared")
+        app.typeKey("a", modifierFlags: .command)
+        app.typeText("Made\n")
+        XCTAssertTrue(cell("Made").waitForExistence(timeout: 5), "the inline rename didn't commit")
+    }
+
     func testKindColumn() {
         launchToRoot()
         XCTAssertTrue(table.buttons["Kind"].exists || table.staticTexts["Kind"].exists, "Kind column header missing")

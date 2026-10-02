@@ -49,3 +49,24 @@ import Testing
     gate.signal()
     try await eventually { device.isClosed }
 }
+
+@Test func onEndWaitsForTheRunningBodyAfterShutdown() async throws {
+    let worker = DeviceWorker(device: FakeDevice(), name: "t")
+    let gate = DispatchSemaphore(value: 0)
+    let ended = Log<String>()
+    let running = Task {
+        try await worker.perform(.transfer, onEnd: { ended.append("running") }) { _ in gate.wait() }
+    }
+    try await Task.sleep(for: .milliseconds(50))
+    let queued = Task { try await worker.perform(.interactive, onEnd: { ended.append("queued") }) { _ in 1 } }
+    try await Task.sleep(for: .milliseconds(20))
+    #expect(!worker.isStopping)
+    worker.shutdown(reason: .deviceDisconnected)
+    #expect(worker.isStopping)
+    await #expect(throws: MTPError.deviceDisconnected) { try await running.value }
+    _ = await queued.result
+    #expect(ended.items == ["queued"], "the running body hasn't returned yet")
+    gate.signal()
+    try await eventually { ended.items.count == 2 }
+    #expect(ended.items == ["queued", "running"])
+}
