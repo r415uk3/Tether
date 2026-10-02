@@ -2,9 +2,11 @@ import SwiftUI
 import TetherCore
 
 struct SettingsView: View {
+    let updater: Updater
     @AppStorage(SettingsKey.downloadFolderPath) private var downloadFolderPath = AppSettings.defaultDownloadFolder.path
     @AppStorage(SettingsKey.conflictDefault) private var conflictDefault = ConflictDefault.ask
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
+    @State private var autoChecks = false
 
     var body: some View {
         Form {
@@ -19,7 +21,12 @@ struct SettingsView: View {
                 ForEach(ConflictDefault.allCases, id: \.self) { Text($0.title).tag($0) }
             }
             Toggle("Show hidden files", isOn: $showHiddenFiles)
+            Toggle("Check for updates automatically", isOn: Binding(
+                get: { autoChecks },
+                set: { autoChecks = $0; updater.updater.automaticallyChecksForUpdates = $0 }))
+                .disabled(!updater.isStarted)
         }
+        .onAppear { autoChecks = updater.isStarted && updater.updater.automaticallyChecksForUpdates }
         .formStyle(.grouped)
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)

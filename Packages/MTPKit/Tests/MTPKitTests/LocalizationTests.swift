@@ -2,9 +2,6 @@ import Foundation
 import Testing
 @testable import MTPKit
 
-/// The module's compiled Russian strings.
-private let ru = Bundle(url: Bundle.module.url(forResource: "ru", withExtension: "lproj")!)!
-
 @Suite struct LocalizationTests {
     @Test func everyLocalizedStringUsesTheModuleBundle() throws {
         let offenders = try sourceLines(module: "MTPKit").filter {
@@ -13,7 +10,8 @@ private let ru = Bundle(url: Bundle.module.url(forResource: "ru", withExtension:
         #expect(offenders.isEmpty, "Missing bundle: .module: \(offenders.map(\.location))")
     }
 
-    @Test func errorMessagesHaveRussianTranslations() {
+    @Test func errorMessagesHaveRussianTranslations() throws {
+        let ru = try russianBundle()
         #expect(ru.localizedString(forKey: "The phone was disconnected.", value: "?", table: nil) == "Телефон отключён.")
         let format = ru.localizedString(forKey: "An item named “%@” already exists in this folder.", value: "?", table: nil)
         #expect(String(format: format, "50% off %@.jpg").contains("50% off %@.jpg"))

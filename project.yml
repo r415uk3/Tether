@@ -13,11 +13,21 @@ settings:
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGN_STYLE: Manual
     DEVELOPMENT_TEAM: ""
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
+  configs:
+    Release:
+      ONLY_ACTIVE_ARCH: NO
+      ARCHS: "arm64 x86_64"
+      CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+      CODE_SIGN_IDENTITY: "-"
+      CODE_SIGN_STYLE: Manual
 packages:
   MTPKit:
     path: Packages/MTPKit
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
 targets:
   Tether:
     type: application
@@ -29,11 +39,28 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Tether
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SPARKLE_PUBLIC_KEY: "REPLACE_IN_TASK_5"
+        # Ad-hoc signatures carry no Team ID, so dyld refuses to load the (separately signed) Sparkle.framework
+        # unless library validation is off.
+        CODE_SIGN_ENTITLEMENTS: Tether/Tether.entitlements
+    # GENERATE_INFOPLIST_FILE drops unknown INFOPLIST_KEY_* entries, so Sparkle's keys live in an explicit plist
+    # that Xcode merges with the generated one.
+    info:
+      path: Tether/Info.plist
+      properties:
+        SUFeedURL: https://r415uk3.github.io/Tether/appcast.xml
+        SUPublicEDKey: $(SPARKLE_PUBLIC_KEY)
+        SUEnableAutomaticChecks: true
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
     dependencies:
       - package: MTPKit
         product: MTPKit
       - package: MTPKit
         product: TetherCore
+      - package: Sparkle
+        product: Sparkle
       - target: MTPHelper
   MTPHelper:
     type: xpc-service
@@ -47,6 +74,7 @@ targets:
         SWIFT_INCLUDE_PATHS: $(SRCROOT)/Vendor/CLibMTP
         LIBRARY_SEARCH_PATHS: $(SRCROOT)/Vendor/build/lib
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
+        CODE_SIGN_ENTITLEMENTS: MTPHelper/MTPHelper.entitlements
     info:
       path: MTPHelper/Info.plist
       properties:
