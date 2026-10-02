@@ -1,0 +1,16 @@
+Tether is free software under the MIT License. Source: https://github.com/r415uk3/Tether
+
+Tether bundles and dynamically links these libraries:
+
+libmtp 1.1.23 — GNU Lesser General Public License v2.1
+Source: https://github.com/libmtp/libmtp/releases/tag/v1.1.23
+
+libusb 1.0.30 — GNU Lesser General Public License v2.1
+Source: https://github.com/libusb/libusb/releases/tag/v1.0.30
+
+You may replace these libraries with modified versions: they live in Tether.app/Contents/XPCServices/MTPHelper.xpc/Contents/Frameworks. The exact build script is Vendor/build-libs.sh in Tether's repository.
+
+The full text of the GNU Lesser General Public License v2.1 follows.
+
+----------------------------------------------------------------------
+
