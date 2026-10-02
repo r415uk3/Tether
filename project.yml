@@ -27,7 +27,7 @@ packages:
     path: Packages/MTPKit
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    majorVersion: 2.10.0
+    exactVersion: 2.10.0
 targets:
   Tether:
     type: application
@@ -52,6 +52,8 @@ targets:
         SUFeedURL: https://r415uk3.github.io/Tether/appcast.xml
         SUPublicEDKey: $(SPARKLE_PUBLIC_KEY)
         SUEnableAutomaticChecks: true
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
     dependencies:
       - package: MTPKit
         product: MTPKit

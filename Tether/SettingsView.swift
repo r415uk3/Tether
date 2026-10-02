@@ -6,6 +6,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.downloadFolderPath) private var downloadFolderPath = AppSettings.defaultDownloadFolder.path
     @AppStorage(SettingsKey.conflictDefault) private var conflictDefault = ConflictDefault.ask
     @AppStorage(SettingsKey.showHiddenFiles) private var showHiddenFiles = false
+    @State private var autoChecks = false
 
     var body: some View {
         Form {
@@ -21,9 +22,11 @@ struct SettingsView: View {
             }
             Toggle("Show hidden files", isOn: $showHiddenFiles)
             Toggle("Check for updates automatically", isOn: Binding(
-                get: { updater.updater.automaticallyChecksForUpdates },
-                set: { updater.updater.automaticallyChecksForUpdates = $0 }))
+                get: { autoChecks },
+                set: { autoChecks = $0; updater.updater.automaticallyChecksForUpdates = $0 }))
+                .disabled(!updater.isStarted)
         }
+        .onAppear { autoChecks = updater.isStarted && updater.updater.automaticallyChecksForUpdates }
         .formStyle(.grouped)
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
