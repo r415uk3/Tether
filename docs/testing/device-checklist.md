@@ -9,6 +9,21 @@ Run before each release with at least a Pixel, a Samsung and a Xiaomi phone. Not
 - [ ] Two phones at once: both appear; browsing one doesn't block the other.
 - [ ] Launch Tether with no phone: the connection guide appears (no endless spinner).
 
+## Auto-open
+- [ ] Settings → turn on "Open Tether when a phone connects": stays on; one system "background item" notice at most.
+- [ ] Quit Tether, plug in a phone in "File transfer": Tether opens in front within 5 s with that phone selected.
+- [ ] Plug in "Charging only": nothing opens. Switch to "File transfer": Tether opens.
+- [ ] Locked phone already in File transfer: Tether opens on the "Unlock …" screen.
+- [ ] Tether running with its window closed (⌘W) / minimized: replug → the window comes back in front.
+- [ ] Quit Tether while the phone stays connected: it does not reopen within 1 minute.
+- [ ] Phone connected before logging in: after login Tether does not open.
+- [ ] Sleep the Mac with the phone connected, wake: Tether does not open.
+- [ ] Plug in an iPhone or camera: Tether does not open.
+- [ ] Install the next build over this one (or a Sparkle update), launch once, quit, replug: Tether still opens.
+- [ ] Restart the Mac with auto-open on, then plug in: Tether opens.
+- [ ] Turn the setting off: `launchctl print gui/$(id -u)/dev.tether.Tether.Launcher` reports no such service.
+- [ ] Activity Monitor: TetherLauncher under ~15 MB memory and 0.0% CPU while idle.
+
 ## Image Capture (Release)
 - [ ] Open Image Capture, plug in the phone: Tether shows "Another App Is Using …" with Release.
 - [ ] Press Release: the phone becomes browsable within 3 s. Repeat 3 times; note any "Still held" results.
