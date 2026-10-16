@@ -39,6 +39,9 @@ struct ContentView: View {
                let arrived = new.first(where: { device in !old.contains { $0.id == device.id } }) {
                 pendingDevice = arrived.id
             }
+            if let pendingDevice, !new.contains(where: { $0.id == pendingDevice }) {
+                self.pendingDevice = nil // it left before its storages loaded
+            }
             ensureSelection()
         }
         .toolbar {

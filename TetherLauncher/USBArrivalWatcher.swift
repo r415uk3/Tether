@@ -41,11 +41,19 @@ final class USBArrivalWatcher {
                 Unmanaged<USBArrivalWatcher>.fromOpaque(context).takeUnretainedValue().handleRemovals(iterator)
             }
         }
-        _ = IOServiceAddMatchingNotification(port, kIOFirstMatchNotification, IOServiceMatching("IOUSBHostDevice"),
-                                             added, context, &addedIterator)
+        let addedResult = IOServiceAddMatchingNotification(port, kIOFirstMatchNotification,
+                                                           IOServiceMatching("IOUSBHostDevice"), added, context,
+                                                           &addedIterator)
+        if addedResult != KERN_SUCCESS {
+            logger.error("Can't watch USB arrivals: IOServiceAddMatchingNotification returned \(addedResult)")
+        }
         noteExistingDevices() // drains and arms the "added" notification
-        _ = IOServiceAddMatchingNotification(port, kIOTerminatedNotification, IOServiceMatching("IOUSBHostDevice"),
-                                             removed, context, &removedIterator)
+        let removedResult = IOServiceAddMatchingNotification(port, kIOTerminatedNotification,
+                                                             IOServiceMatching("IOUSBHostDevice"), removed, context,
+                                                             &removedIterator)
+        if removedResult != KERN_SUCCESS {
+            logger.error("Can't watch USB removals: IOServiceAddMatchingNotification returned \(removedResult)")
+        }
         handleRemovals(removedIterator) // arms the "terminated" notification
 
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -123,7 +131,9 @@ final class USBArrivalWatcher {
 
     /// Identifies the same phone across re-enumerations: its serial, or its port when it has none.
     private static func key(of device: io_registry_entry_t) -> String {
-        if let serial = string(device, "kUSBSerialNumberString"), !serial.isEmpty { return serial }
+        for serialKey in ["kUSBSerialNumberString", "USB Serial Number"] {
+            if let serial = string(device, serialKey), !serial.isEmpty { return serial }
+        }
         return "loc:\(int(device, "locationID") ?? 0)"
     }
 

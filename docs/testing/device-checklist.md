@@ -23,6 +23,8 @@ Run before each release with at least a Pixel, a Samsung and a Xiaomi phone. Not
 - [ ] Restart the Mac with auto-open on, then plug in: Tether opens.
 - [ ] Turn the setting off: `launchctl print gui/$(id -u)/dev.tether.Tether.Launcher` reports no such service.
 - [ ] Activity Monitor: TetherLauncher under ~15 MB memory and 0.0% CPU while idle.
+- [ ] With auto-open on, launch Tether twice: the TetherLauncher PID (Activity Monitor) stays the same — no re-register on every launch.
+- [ ] Silent update installed on quit, then restart the Mac without opening Tether, then plug in: note whether Tether opens (known gap: repair runs on the next Tether launch).
 
 ## Image Capture (Release)
 - [ ] Open Image Capture, plug in the phone: Tether shows "Another App Is Using …" with Release.
