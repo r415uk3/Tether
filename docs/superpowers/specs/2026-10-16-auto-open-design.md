@@ -1,5 +1,9 @@
 # Auto-open Tether when a phone connects
 
+> **Status: parked until Tether has a Developer ID (2026-10-16).** The feature works on a real phone, but after
+> every app update macOS stops starting the helper, and no repair from inside the app fixed it reliably. See
+> "Real-device findings" below.
+
 ## Intent
 
 Today, using Tether starts with an extra step: you plug in the phone, choose **File transfer**, and then have to open Tether yourself. The user wants that step gone. Plugging in an Android phone in File transfer mode should bring Tether to the front, the way Image Capture opens for cameras.
@@ -57,6 +61,47 @@ A throwaway host and login-item helper built with `swiftc` and `codesign -s -`, 
 - **Fix that worked:** on the first launch of a new build (compare `CFBundleVersion` with a stored "registered for build" value), call `unregister()`, **wait until launchd has dropped the job** (poll `status` / a short delay; registering again immediately reproduced the stale-LWCR failure), then `register()`. The new helper starts and the old one is gone. **No notification appears on this re-registration.** The app must have been opened through LaunchServices (normal launch or Sparkle relaunch), not by running the binary directly.
 - **Real phone (vivo iQOO Z10 Turbo Pro, VID 0x2D95, USB debugging on):** charging-only exposes just `255/66/1` "ADB Interface", so no trigger. Switching to File transfer re-enumerates the device as a new arrival with `6/1/1` "MTP", `8/6/80` "Mass Storage" and `255/66/1` "ADB Interface". So this phone uses the still-image class **with** the "MTP" name, which the matching rule above accepts. The interface name lives in the IORegistry key **`kUSBString`**, not `USB Interface Name`. The interfaces were present 1.5 s after the device-arrival notification. Match on interface arrival (`IOUSBHostInterface`) or wait briefly, rather than reading children at the instant the device appears.
 - Not tested in the spike: surviving a reboot, a real Sparkle install, or descriptor matching against a real phone. Cover these in the device checklist.
+
+## Real-device findings (2026-10-16, vivo iQOO Z10 Turbo Pro, ad-hoc Release builds 100–107)
+
+**What works.** The descriptor match (`6/1/1` "MTP"), the arrival filter and opening Tether all work on the phone. One
+fix came out of the test: the reconnect grace was 5 s, but a hand replug takes 1.7–2 s while connection glitches come
+back in ~0.2 s (kernel log: "transaction error → hardware connection lost → enumerated"). So every deliberate replug was
+ignored. The grace is now 1 s.
+
+**What doesn't: updates.** After any update, whether installed by copying over the app or Sparkle-style (move the old app
+aside, move the new one in), launchd can't spawn the helper. It fails with either `copy_bundle_path(<BTM item uuid>) error
+0x6f Invalid or missing Program` or `Unable to get updated LWCR … 0x16`. `SMAppService.status` keeps reporting
+`.enabled`, so nothing visible says it's broken. In System Settings → Login Items, Tether shows "Not running in
+background".
+
+Tried from inside the app, on the first launch after an update. None of these worked reliably:
+
+| Attempt | Result |
+|---|---|
+| unregister → wait for the helper process to exit → settle 1 s → register (the shipped repair) | failed on every real update |
+| `LSRegisterURL(helper, true)` before register, at launch or right before register | failed |
+| run `lsregister -f <helper>` from the app at launch | failed |
+| verify after register and do the whole repair a second time in the same process | failed |
+| wait 20 s+ after the install before the first launch | failed |
+| a launch agent (`SMAppService.agent`, `BundleProgram`) instead of a login item | breaks after updates the same way |
+| agent: one-process re-register (unregister → wait until `launchctl print` loses the job → register) | failed |
+| agent: register from a child process / a second app instance launched via `NSWorkspace` | failed |
+| agent: register only, without unregister | failed |
+| agent: unregister in one launch, register in the next normal launch | worked twice (builds 2, 4), then failed (build 9) |
+
+What sometimes recovered the real app: quit Tether, run `lsregister -f` on the helper from a shell, open Tether (4/4).
+The second launch after an update with the in-app `lsregister` call also recovered once (1/1). Neither is something
+the app can rely on, and neither is a fix it can ship.
+
+**Working theory, unproven.** Background Task Management keeps a lightweight code requirement (LWCR) for each item,
+tied to the registering app's ad-hoc signature, and doesn't reliably refresh it when the cdhash changes on every
+build. A Developer ID signature has a stable designated requirement, so this should go away. That's the expected
+path, but it hasn't been verified.
+
+**Resuming this work.** First re-run the update test (install build N+1 over N, Sparkle-style, then open once) with
+Developer ID signing and notarization. If the helper survives updates, the rest of the branch is ready. The
+experimental repair code (lsregister refresh plus verify-and-retry) was not kept. It's described above.
 
 ## Constraints
 
