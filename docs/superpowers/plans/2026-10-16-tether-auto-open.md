@@ -27,7 +27,7 @@
 2. **The user turns the item off in System Settings → Login Items** while Tether is open. Settings must show it as off or needing approval when reopened, not stale "on". Pinned by `refreshPicksUpExternalChange` (Task 3).
 3. **A phone already connected when the launcher starts** (login, or just after turning the toggle on) must not open Tether. Pinned by `existingDevicesAtStartAreIgnored` (Task 2) plus the launcher draining its first iterator without handling it (Task 4).
 4. **Interfaces attach after the device-arrival notification** (seen at about 1.5 s on the iQOO). A phone whose MTP interface shows up late must still trigger. Covered by Task 4's read-then-retry, and a checklist row (Task 6).
-5. **A user who deliberately replugs within 5 s** is treated as a reconnect and ignored. That's an accepted trade-off from the spec. Pinned by `quickReplugOfFileTransferPhoneIsIgnored` (Task 2) so nobody "fixes" it by accident.
+5. **A user who deliberately replugs within 1 s** is treated as a reconnect and ignored (grace lowered from 5 s after the real-phone test). That's an accepted trade-off from the spec. Pinned by `quickReplugOfFileTransferPhoneIsIgnored` (Task 2) so nobody "fixes" it by accident.
 
 ---
 

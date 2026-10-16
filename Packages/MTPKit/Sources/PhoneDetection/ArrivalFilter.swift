@@ -3,7 +3,7 @@ import Foundation
 /// Decides whether a USB arrival should open Tether, ignoring wakes, quick reconnects and duplicate notifications.
 public struct ArrivalFilter: Sendable {
     public static let wakeGrace: TimeInterval = 10       // spec: ~10 s after wake
-    public static let reconnectGrace: TimeInterval = 5   // spec: ~5 s after the same phone left
+    public static let reconnectGrace: TimeInterval = 1   // connection glitches come back in ~0.2 s; a hand replug takes 1.5 s+
 
     private var present: [UInt64: (key: String, isFileTransfer: Bool)] = [:]
     private var fileTransferLeft: [String: Date] = [:]

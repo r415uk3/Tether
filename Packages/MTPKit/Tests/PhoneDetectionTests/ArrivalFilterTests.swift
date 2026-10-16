@@ -22,12 +22,19 @@ private let t0 = Date(timeIntervalSinceReferenceDate: 0)
         let r3 = f.noteArrival(entryID: 2, key: "S", isFileTransfer: true, at: t0 + 11)
         #expect(r3)
     }
-    @Test func quickReplugOfFileTransferPhoneIsIgnored() {
+    @Test func connectionGlitchIsIgnored() {         // iQOO: "connection lost", back 0.2 s later
         var f = ArrivalFilter()
         _ = f.noteArrival(entryID: 1, key: "S", isFileTransfer: true, at: t0)
         f.noteRemoval(entryID: 1, at: t0 + 30)
-        let r4 = f.noteArrival(entryID: 2, key: "S", isFileTransfer: true, at: t0 + 34)
+        let r4 = f.noteArrival(entryID: 2, key: "S", isFileTransfer: true, at: t0 + 30.2)
         #expect(!r4)
+    }
+    @Test func deliberateReplugOpens() {             // iQOO: unplugged and plugged back in by hand, 1.7 s apart
+        var f = ArrivalFilter()
+        _ = f.noteArrival(entryID: 1, key: "S", isFileTransfer: true, at: t0)
+        f.noteRemoval(entryID: 1, at: t0 + 30)
+        let opens = f.noteArrival(entryID: 2, key: "S", isFileTransfer: true, at: t0 + 31.7)
+        #expect(opens)
     }
     @Test func replugAfterGraceOpens() {
         var f = ArrivalFilter()
@@ -48,7 +55,7 @@ private let t0 = Date(timeIntervalSinceReferenceDate: 0)
         var f = ArrivalFilter()
         f.noteExisting(entryID: 1, key: "S", isFileTransfer: true)
         f.noteRemoval(entryID: 1, at: t0)              // dock reconnect right after login
-        let r8 = f.noteArrival(entryID: 2, key: "S", isFileTransfer: true, at: t0 + 2)
+        let r8 = f.noteArrival(entryID: 2, key: "S", isFileTransfer: true, at: t0 + 0.3)
         #expect(!r8)
     }
     @Test func otherPhoneIsNotAffectedByReconnectGrace() {
