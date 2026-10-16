@@ -70,6 +70,7 @@ final class USBArrivalWatcher {
         while case let device = IOIteratorNext(iterator), device != 0 {
             // Keep the reference from IOIteratorNext until the delayed read is done; released in `finishArrival`.
             pending.insert(Self.entryID(of: device))
+            let arrivedAt = Date() // the filter's grace windows count from the notification, not the delayed read
             Task { [self] in
                 try? await Task.sleep(for: Self.firstReadDelay)
                 var interfaces = Self.interfaces(of: device)
@@ -77,12 +78,12 @@ final class USBArrivalWatcher {
                     try? await Task.sleep(for: Self.secondReadDelay)
                     interfaces = Self.interfaces(of: device)
                 }
-                finishArrival(device, interfaces: interfaces)
+                finishArrival(device, interfaces: interfaces, arrivedAt: arrivedAt)
             }
         }
     }
 
-    private func finishArrival(_ device: io_object_t, interfaces: [USBInterfaceInfo]) {
+    private func finishArrival(_ device: io_object_t, interfaces: [USBInterfaceInfo], arrivedAt: Date) {
         defer { IOObjectRelease(device) }
         let entryID = Self.entryID(of: device)
         let name = Self.string(device, "kUSBProductString") ?? "unknown device"
@@ -92,7 +93,7 @@ final class USBArrivalWatcher {
         }
         let isFileTransfer = FileTransferMatch.isFileTransfer(interfaces)
         let shouldOpen = filter.noteArrival(entryID: entryID, key: Self.key(of: device),
-                                            isFileTransfer: isFileTransfer, at: Date())
+                                            isFileTransfer: isFileTransfer, at: arrivedAt)
         let outcome = shouldOpen ? "opening Tether"
             : isFileTransfer ? "not opening (wake, reconnect or duplicate)"
             : "not opening (not in File transfer mode)"
