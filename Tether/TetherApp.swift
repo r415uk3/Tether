@@ -18,8 +18,9 @@ struct TetherApp: App {
 
     private let updater = Updater(start: !UserDefaults.standard.bool(forKey: "UseFakeDevices") && Updater.isConfigured)
 
-    /// `nil` in fake mode, so UI tests never touch the real login item.
-    @State private var autoOpen: AutoOpenController? = TetherApp.makeAutoOpen()
+    /// `nil` in fake mode, so UI tests never touch the real login item. Static, so there is one per launch.
+    private static let autoOpenController: AutoOpenController? = makeAutoOpen()
+    private var autoOpen: AutoOpenController? { Self.autoOpenController }
 
     init() {
         let previews = Self.previewDirectory
@@ -28,16 +29,16 @@ struct TetherApp: App {
                                                object: nil, queue: .main) { _ in
             PreviewCache.clear(directory: previews)
         }
+        // Once per launch, independent of the window and of the first device load.
+        // No-op unless an update left the launcher stale.
+        Self.autoOpenController?.repairOncePerLaunch()
     }
 
     var body: some Scene {
         Window("Tether", id: "main") {
             ContentView(autoOpen: autoOpen)
                 .environment(model)
-                .task {
-                    await model.start()
-                    await autoOpen?.repairIfNeeded() // no-op unless an update left the launcher stale
-                }
+                .task { await model.start() }
                 .frame(minWidth: 720, minHeight: 420)
         }
         .commands {

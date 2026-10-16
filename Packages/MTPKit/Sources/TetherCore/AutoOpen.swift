@@ -31,6 +31,9 @@ public final class AutoOpenController {
     @ObservationIgnored private let pollInterval: Duration
     @ObservationIgnored private let pollTimeout: Duration
     @ObservationIgnored private let settleDelay: Duration
+    /// Bumped by every `setEnabled`, so a repair in flight knows the user changed the setting meanwhile.
+    @ObservationIgnored private var userChanges = 0
+    @ObservationIgnored private var launchRepair: Task<Void, Never>?
 
     public init(service: any LoginItemService,
                 defaults: UserDefaults = .standard,
@@ -61,6 +64,7 @@ public final class AutoOpenController {
     }
 
     public func setEnabled(_ on: Bool) async {
+        userChanges += 1
         if on {
             register()
         } else {
@@ -75,11 +79,26 @@ public final class AutoOpenController {
         }
     }
 
+    /// Starts `repairIfNeeded` the first time it is called and returns that same task on every later call,
+    /// so the repair runs once per launch no matter how often a window appears.
+    @discardableResult
+    public func repairOncePerLaunch() -> Task<Void, Never> {
+        if let launchRepair { return launchRepair }
+        let task = Task { await repairIfNeeded() }
+        launchRepair = task
+        return task
+    }
+
     /// Re-registers a launcher that is on but stale: registered by another version, or not running.
+    ///
+    /// Once it has unregistered, it always waits for the old helper and the settle delay, even if the calling task
+    /// is cancelled: registering right away leaves the launcher unable to start. If the user turns the setting
+    /// on or off in the meantime, their choice stands and the repair does not register.
     public func repairIfNeeded() async {
         guard service.status == .enabled else { return }
         let storedVersion = defaults.string(forKey: SettingsKey.autoOpenRegisteredVersion)
         guard storedVersion != currentVersion || !isHelperRunning() else { return }
+        let changesAtStart = userChanges
         do {
             try service.unregister()
         } catch {
@@ -87,8 +106,9 @@ public final class AutoOpenController {
             refresh()
             return
         }
-        await waitForHelperToExit()
-        try? await Task.sleep(for: settleDelay)
+        // An unstructured task does not inherit cancellation, so its sleeps really wait.
+        await Task { await self.waitForHelperToExitAndSettle() }.value
+        guard userChanges == changesAtStart else { return }
         register()
     }
 
@@ -103,12 +123,13 @@ public final class AutoOpenController {
         refresh()
     }
 
-    /// Polls until the old helper process is gone or `pollTimeout` passes; always yields between checks.
-    private func waitForHelperToExit() async {
+    /// Polls until the old helper process is gone or `pollTimeout` passes, then waits `settleDelay`.
+    private func waitForHelperToExitAndSettle() async {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: pollTimeout)
         while isHelperRunning(), clock.now < deadline {
             try? await Task.sleep(for: pollInterval)
         }
+        try? await Task.sleep(for: settleDelay)
     }
 }
