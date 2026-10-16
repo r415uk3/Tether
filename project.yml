@@ -62,6 +62,25 @@ targets:
       - package: Sparkle
         product: Sparkle
       - target: MTPHelper
+      - target: TetherLauncher
+        embed: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Library/LoginItems
+  TetherLauncher:
+    type: application
+    platform: macOS
+    sources: [TetherLauncher]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.tether.Tether.Launcher
+        PRODUCT_NAME: TetherLauncher
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSUIElement: YES
+        SKIP_INSTALL: YES
+    dependencies:
+      - package: MTPKit
+        product: PhoneDetection
   MTPHelper:
     type: xpc-service
     platform: macOS
