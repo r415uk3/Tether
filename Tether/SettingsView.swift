@@ -42,9 +42,13 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func autoOpenSettings(_ autoOpen: AutoOpenController) -> some View {
-        Toggle("Open Tether when a phone connects", isOn: Binding(
+        Toggle(isOn: Binding(
             get: { autoOpen.isOn },
-            set: { on in Task { await autoOpen.setEnabled(on) } }))
+            set: { on in Task { await autoOpen.setEnabled(on) } })) {
+            Text("Open Tether when a phone connects")
+            // Ad-hoc builds: after an update macOS won't start the helper until the next login (see the design doc).
+            Text("After Tether updates, this works again once you restart your Mac.")
+        }
         if autoOpen.state == .needsApproval {
             LabeledContent {
                 Button("Open Login Items…") { SMAppService.openSystemSettingsLoginItems() }

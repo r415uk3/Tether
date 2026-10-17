@@ -115,6 +115,16 @@
         }
       }
     },
+    "After Tether updates, this works again once you restart your Mac." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "После обновления Tether эта функция снова заработает, когда вы перезагрузите Mac."
+          }
+        }
+      }
+    },
     "Allow Tether in Login Items to finish turning this on." : {
       "localizations" : {
         "ru" : {

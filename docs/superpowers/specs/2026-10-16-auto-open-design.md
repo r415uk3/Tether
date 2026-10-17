@@ -1,8 +1,8 @@
 # Auto-open Tether when a phone connects
 
-> **Status: parked until Tether has a Developer ID (2026-10-16).** The feature works on a real phone, but after
-> every app update macOS stops starting the helper, and no repair from inside the app fixed it reliably. See
-> "Real-device findings" below.
+> **Status (2026-10-17): ships with a known limitation.** After an app update, macOS won't start the helper until the
+> next login or restart, and the app can't recover it by itself (ad-hoc signing; see "Real-device findings"). Settings
+> says so under the switch. Revisit once Tether has a Developer ID.
 
 ## Intent
 
