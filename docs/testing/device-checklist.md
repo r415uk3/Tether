@@ -33,6 +33,7 @@ Run before each release with at least a Pixel, a Samsung and a Xiaomi phone. Not
 - [ ] Without pressing Release, Tether never quits Image Capture on its own (leave it open for 1 minute).
 
 ## Transfers
+- [ ] In the phone's root folder: drop a file in (Keep Both and Replace on a second drop) and create a folder; nothing fails (Android rejects a root sent as 0).
 - [ ] Download a file larger than 4 GB; compare its size and checksum with the phone's copy.
 - [ ] Upload a file larger than 4 GB.
 - [ ] Unplug mid-download: the job fails with Retry; no `.partial` file remains in the download folder.
