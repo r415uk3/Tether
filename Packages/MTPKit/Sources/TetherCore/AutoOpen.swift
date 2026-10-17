@@ -27,6 +27,7 @@ public final class AutoOpenController {
     @ObservationIgnored private let service: any LoginItemService
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let currentVersion: String
+    @ObservationIgnored private let appPath: String
     @ObservationIgnored private let isHelperRunning: @MainActor () -> Bool
     @ObservationIgnored private let pollInterval: Duration
     @ObservationIgnored private let pollTimeout: Duration
@@ -38,6 +39,7 @@ public final class AutoOpenController {
     public init(service: any LoginItemService,
                 defaults: UserDefaults = .standard,
                 currentVersion: String,
+                appPath: String = Bundle.main.bundlePath,
                 isHelperRunning: @escaping @MainActor () -> Bool,
                 pollInterval: Duration = .milliseconds(250),
                 pollTimeout: Duration = .seconds(5),
@@ -45,6 +47,7 @@ public final class AutoOpenController {
         self.service = service
         self.defaults = defaults
         self.currentVersion = currentVersion
+        self.appPath = appPath
         self.isHelperRunning = isHelperRunning
         self.pollInterval = pollInterval
         self.pollTimeout = pollTimeout
@@ -71,6 +74,7 @@ public final class AutoOpenController {
             do {
                 try service.unregister()
                 defaults.removeObject(forKey: SettingsKey.autoOpenRegisteredVersion)
+                defaults.removeObject(forKey: SettingsKey.autoOpenRegisteredAppPath)
                 lastError = nil
             } catch {
                 lastError = error.localizedDescription
@@ -96,6 +100,10 @@ public final class AutoOpenController {
     /// on or off in the meantime, their choice stands and the repair does not register.
     public func repairIfNeeded() async {
         guard service.status == .enabled else { return }
+        // Only the copy that registered the launcher repairs it (a registration from before paths were stored is
+        // adopted). Another copy, opened from the DMG or Downloads, would point the login item at itself.
+        let registeredBy = defaults.string(forKey: SettingsKey.autoOpenRegisteredAppPath)
+        guard registeredBy == nil || registeredBy == appPath else { return }
         let storedVersion = defaults.string(forKey: SettingsKey.autoOpenRegisteredVersion)
         guard storedVersion != currentVersion || !isHelperRunning() else { return }
         let changesAtStart = userChanges
@@ -116,6 +124,7 @@ public final class AutoOpenController {
         do {
             try service.register()
             defaults.set(currentVersion, forKey: SettingsKey.autoOpenRegisteredVersion)
+            defaults.set(appPath, forKey: SettingsKey.autoOpenRegisteredAppPath)
             lastError = nil
         } catch {
             lastError = error.localizedDescription

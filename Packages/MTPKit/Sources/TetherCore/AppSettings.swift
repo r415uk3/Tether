@@ -6,6 +6,8 @@ public enum SettingsKey {
     public static let showHiddenFiles = "showHiddenFiles"
     public static let viewMode = "viewMode"
     public static let autoOpenRegisteredVersion = "autoOpenRegisteredVersion"
+    /// The app copy that registered the launcher; other copies (DMG, Downloads) must not re-register it.
+    public static let autoOpenRegisteredAppPath = "autoOpenRegisteredAppPath"
 }
 
 /// The Settings choice for name clashes; `.ask` shows the dialog.
