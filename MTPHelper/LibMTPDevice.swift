@@ -101,7 +101,9 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         file.pointee.filename = strdup(name)
         file.pointee.filesize = size
         file.pointee.filetype = LIBMTP_FILETYPE_UNKNOWN
-        file.pointee.parent_id = Self.mtpParent(parentID)
+        // Root stays 0xFFFFFFFF. libmtp's "0 = root" is sent to Android phones as-is (they take the SendObjectInfo
+        // path), and they reject it with Invalid Object Handle; for other files libmtp may redirect 0 to Music etc.
+        file.pointee.parent_id = parentID
         file.pointee.storage_id = storageID
         let rc = withProgressContext(progress) { context in
             fileURL.withUnsafeFileSystemRepresentation { path in
@@ -119,7 +121,7 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         let h = try requireHandle()
         let cName = strdup(name)
         defer { free(cName) }
-        let id = LIBMTP_Create_Folder(h, cName, Self.mtpParent(parentID), storageID)
+        let id = LIBMTP_Create_Folder(h, cName, parentID, storageID) // root as 0xFFFFFFFF, see upload
         if id == 0 { throw lastError(h) }
         return FileEntry(objectID: id, parentID: parentID, storageID: storageID, name: name, size: 0,
                          modified: Date(), isFolder: true)
@@ -169,11 +171,6 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
     private func requireHandle() throws -> UnsafeMutablePointer<LIBMTP_mtpdevice_t> {
         guard let handle else { throw MTPError.deviceDisconnected }
         return handle
-    }
-
-    /// libmtp uses 0 for "root" when creating objects, but 0xFFFFFFFF when listing.
-    private static func mtpParent(_ parentID: UInt32) -> UInt32 {
-        parentID == FileEntry.rootID ? 0 : parentID
     }
 
     private static func take(_ pointer: UnsafeMutablePointer<CChar>?) -> String? {
