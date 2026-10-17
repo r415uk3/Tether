@@ -84,8 +84,8 @@ import MTPKit
     }
 
     @Test func jobsForSameDeviceRunOneAtATime() async throws {
-        let a = device.addFile("a.bin", data: Data(count: 100_000))
-        let b = device.addFile("b.bin", data: Data(count: 100_000))
+        let a = device.addFile("a.bin", data: Data(count: 10_000))
+        let b = device.addFile("b.bin", data: Data(count: 10_000))
         let (queue, _) = try await makeQueue()
         let dir = try makeTempDirectory()
         queue.enqueueDownload(a, deviceID: "p1", into: dir)
@@ -95,8 +95,8 @@ import MTPKit
     }
 
     @Test func cancelQueuedJob() async throws {
-        let a = device.addFile("a.bin", data: Data(count: 100_000))
-        let b = device.addFile("b.bin", data: Data(count: 100_000))
+        let a = device.addFile("a.bin", data: Data(count: 10_000))
+        let b = device.addFile("b.bin", data: Data(count: 10_000))
         let (queue, _) = try await makeQueue()
         let dir = try makeTempDirectory()
         queue.enqueueDownload(a, deviceID: "p1", into: dir)
