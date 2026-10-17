@@ -9,7 +9,10 @@ struct StorageSelection: Hashable {
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
+    let autoOpen: AutoOpenController?
     @State private var selection: StorageSelection?
+    /// A phone that arrived while auto-open is on; selected once its storages load.
+    @State private var pendingDevice: DeviceID?
 
     var body: some View {
         NavigationSplitView {
@@ -31,13 +34,27 @@ struct ContentView: View {
             if selection == nil { ensureSelection() } // empty-space click deselects; keep a ready storage selected
         }
         .onChange(of: model.devices.storages, initial: true) { ensureSelection() }
-        .onChange(of: model.devices.devices) { ensureSelection() }
+        .onChange(of: model.devices.devices) { old, new in
+            if autoOpen?.isOn == true,
+               let arrived = new.first(where: { device in !old.contains { $0.id == device.id } }) {
+                pendingDevice = arrived.id
+            }
+            if let pendingDevice, !new.contains(where: { $0.id == pendingDevice }) {
+                self.pendingDevice = nil // it left before its storages loaded
+            }
+            ensureSelection()
+        }
         .toolbar {
             ToolbarItem(placement: .automatic) { TransfersButton() }
         }
     }
 
     private func ensureSelection() {
+        if let pendingDevice, let storage = model.devices.storages[pendingDevice]?.first {
+            selection = StorageSelection(deviceID: pendingDevice, storageID: storage.id)
+            self.pendingDevice = nil
+            return
+        }
         let available = model.devices.devices.flatMap { device in
             (model.devices.storages[device.id] ?? []).map { StorageSelection(deviceID: device.id, storageID: $0.id) }
         }

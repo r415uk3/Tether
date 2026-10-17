@@ -18,6 +18,10 @@ struct TetherApp: App {
 
     private let updater = Updater(start: !UserDefaults.standard.bool(forKey: "UseFakeDevices") && Updater.isConfigured)
 
+    /// `nil` in fake mode, so UI tests never touch the real login item. Static, so there is one per launch.
+    private static let autoOpenController: AutoOpenController? = makeAutoOpen()
+    private var autoOpen: AutoOpenController? { Self.autoOpenController }
+
     init() {
         let previews = Self.previewDirectory
         PreviewCache.clear(directory: previews) // willTerminate doesn't fire after a crash or force-quit
@@ -25,11 +29,14 @@ struct TetherApp: App {
                                                object: nil, queue: .main) { _ in
             PreviewCache.clear(directory: previews)
         }
+        // Once per launch, independent of the window and of the first device load.
+        // No-op unless an update left the launcher stale.
+        Self.autoOpenController?.repairOncePerLaunch()
     }
 
     var body: some Scene {
         Window("Tether", id: "main") {
-            ContentView()
+            ContentView(autoOpen: autoOpen)
                 .environment(model)
                 .task { await model.start() }
                 .frame(minWidth: 720, minHeight: 420)
@@ -41,7 +48,7 @@ struct TetherApp: App {
         }
 
         Settings {
-            SettingsView(updater: updater)
+            SettingsView(updater: updater, autoOpen: autoOpen)
         }
     }
 
@@ -51,5 +58,14 @@ struct TetherApp: App {
             return LocalMTPService(provider: FakeDeviceProvider.demo())
         }
         return XPCMTPService.helper()
+    }
+
+    private static func makeAutoOpen() -> AutoOpenController? {
+        guard !UserDefaults.standard.bool(forKey: "UseFakeDevices") else { return nil }
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return AutoOpenController(service: SMLoginItem(), currentVersion: "\(short) (\(build))",
+                                  isHelperRunning: SMLoginItem.isLauncherRunning)
     }
 }

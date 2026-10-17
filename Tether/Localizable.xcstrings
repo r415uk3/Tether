@@ -115,6 +115,26 @@
         }
       }
     },
+    "After Tether updates, this works again once you restart your Mac." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "После обновления Tether эта функция снова заработает, когда вы перезагрузите Mac."
+          }
+        }
+      }
+    },
+    "Allow Tether in Login Items to finish turning this on." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Разрешите Tether в разделе «Объекты входа», чтобы включить эту функцию."
+          }
+        }
+      }
+    },
     "An item named “%@” already exists in this folder." : {
       "localizations" : {
         "ru" : {
@@ -797,6 +817,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Открыть"
+          }
+        }
+      }
+    },
+    "Open Login Items…" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открыть «Объекты входа»…"
+          }
+        }
+      }
+    },
+    "Open Tether when a phone connects" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открывать Tether при подключении телефона"
           }
         }
       }

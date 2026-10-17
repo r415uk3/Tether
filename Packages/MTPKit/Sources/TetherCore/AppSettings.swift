@@ -5,6 +5,7 @@ public enum SettingsKey {
     public static let conflictDefault = "conflictDefault"
     public static let showHiddenFiles = "showHiddenFiles"
     public static let viewMode = "viewMode"
+    public static let autoOpenRegisteredVersion = "autoOpenRegisteredVersion"
 }
 
 /// The Settings choice for name clashes; `.ask` shows the dialog.
