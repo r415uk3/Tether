@@ -97,7 +97,10 @@ the app can rely on, and neither is a fix it can ship.
 **A restart fixes it (found 2026-10-17).** The Mac restarted overnight with build 107 still in the broken state.
 At login the helper spawned on its first try (`runs = 1`), and auto-open worked with the phone. So the breakage lasts
 from an update until the next login or restart, not forever. A log out/in hasn't been tested on its own yet, and
-neither has `launchctl bootout` of the job, which might do the same thing without a restart.
+a lighter in-app recovery doesn't exist (tested 2026-10-17 on build 108): `launchctl bootout` of the job followed by
+Tether's re-register gives a freshly submitted job that still fails with `copy_bundle_path`, and restarting the per-user
+`BackgroundTaskManagementAgent` doesn't help either. The stale record lives where only a login/restart refreshes it.
+A plain log out/in hasn't been tested.
 
 **Working theory, unproven.** Background Task Management keeps a lightweight code requirement (LWCR) for each item,
 tied to the registering app's ad-hoc signature, and doesn't reliably refresh it when the cdhash changes on every
