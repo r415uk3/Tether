@@ -94,6 +94,11 @@ What sometimes recovered the real app: quit Tether, run `lsregister -f` on the h
 The second launch after an update with the in-app `lsregister` call also recovered once (1/1). Neither is something
 the app can rely on, and neither is a fix it can ship.
 
+**A restart fixes it (found 2026-10-17).** The Mac restarted overnight with build 107 still in the broken state.
+At login the helper spawned on its first try (`runs = 1`), and auto-open worked with the phone. So the breakage lasts
+from an update until the next login or restart, not forever. A log out/in hasn't been tested on its own yet, and
+neither has `launchctl bootout` of the job, which might do the same thing without a restart.
+
 **Working theory, unproven.** Background Task Management keeps a lightweight code requirement (LWCR) for each item,
 tied to the registering app's ad-hoc signature, and doesn't reliably refresh it when the cdhash changes on every
 build. A Developer ID signature has a stable designated requirement, so this should go away. That's the expected
