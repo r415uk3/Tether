@@ -101,4 +101,5 @@ Both workflows use `runs-on: macos-26`, because the code needs the macOS 26 SDK 
 selects the newest installed Xcode (`ls -d /Applications/Xcode*.app | sort -V | tail -1`) with
 `sudo xcode-select -s`; CI also prints `xcodebuild -version` and the SDK version. If `macos-26` is
 unavailable, switch to the newest `macos-*` image whose Xcode ships SDK 26 or later and record it here.
-The native libs (`Vendor/build`) are cached on the hash of `Vendor/build-libs.sh`.
+The native libs (`Vendor/build`) are cached on the hash of `Vendor/build-libs.sh` and `Vendor/patches/` (Tether's
+additions to libmtp, appended to `libmtp.c` at build time).

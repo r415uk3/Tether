@@ -180,10 +180,22 @@ public actor LocalMTPService: MTPService {
     public func list(_ folder: FolderRef) async throws -> [FileEntry] {
         let worker = try await worker(folder.deviceID, scanning: true)
         try checkSession(folder)
-        return try await worker.perform(.interactive) {
-            try $0.listFolder(storageID: folder.storageID, folderID: folder.folderID)
+        let handler = eventHandler
+        return try await worker.perform(.interactive) { device in
+            var lastEmit: UInt64 = 0
+            return try device.listFolder(storageID: folder.storageID, folderID: folder.folderID) { done, total in
+                let now = DispatchTime.now().uptimeNanoseconds
+                if now - lastEmit >= Self.listProgressInterval {
+                    lastEmit = now
+                    handler?(.listProgress(folder: folder, done: done, total: total))
+                }
+                return true
+            }
         }
     }
+
+    /// Big folders list at ~30 ms per file on Android; a few updates a second keep the app's watchdog fed.
+    private static let listProgressInterval: UInt64 = 250_000_000
 
     public func thumbnail(objectID: UInt32, in folder: FolderRef) async throws -> Data? {
         let worker = try await worker(folder.deviceID, scanning: true)

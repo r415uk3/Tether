@@ -41,6 +41,9 @@ for ARCH in arm64 x86_64; do
     make -j"$(sysctl -n hw.ncpu)" >/dev/null && make install >/dev/null)
 
   tar xf "$CACHE/libmtp-${LIBMTP_VERSION}.tar.gz" -C "$P/src"
+  # Tether's GetObjectPropList listing (see the file's header): appended to libmtp.c to reach libmtp internals.
+  cat "$HERE/patches/tether-proplist.c" >> "$P/src/libmtp-${LIBMTP_VERSION}/src/libmtp.c"
+  printf 'LIBMTP_Tether_Get_Folder_Props\nLIBMTP_Tether_Get_File_Props\n' >> "$P/src/libmtp-${LIBMTP_VERSION}/src/libmtp.sym"
   # libmtp's configure demands pkg-config; giving LIBUSB_* directly makes it unnecessary.
   (cd "$P/src/libmtp-${LIBMTP_VERSION}" &&
     LIBUSB_CFLAGS="-I$P/prefix/include/libusb-1.0" LIBUSB_LIBS="-L$P/prefix/lib -lusb-1.0" PKG_CONFIG=/usr/bin/true \
@@ -58,6 +61,9 @@ lipo -create "$WORK"/{arm64,x86_64}/prefix/lib/libmtp.9.dylib -output "$OUT/lib/
 ln -sf libmtp.9.dylib "$OUT/lib/libmtp.dylib"
 cp "$WORK/arm64/prefix/include/libmtp.h" "$OUT/include/"
 
+for SYM in _LIBMTP_Tether_Get_Folder_Props _LIBMTP_Tether_Get_File_Props; do
+  nm -gU "$OUT/lib/libmtp.9.dylib" | grep -q " $SYM$" || { echo "error: libmtp does not export $SYM" >&2; exit 1; }
+done
 if nm -u "$OUT/lib/libusb-1.0.0.dylib" | grep -q '_pipe2$'; then
   echo "error: libusb references pipe2 (macOS 27+)" >&2; exit 1
 fi

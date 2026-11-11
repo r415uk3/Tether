@@ -79,6 +79,8 @@ public final class AppModel {
                     transfers.noteDeviceActivity(device) // the preview shares the device's worker with queued transfers
                 }
             }
+        case .listProgress(let folder, _, _):
+            devices.noteListProgress(folder)
         case .interrupted:
             Task { await devices.reloadDevices() }
         }

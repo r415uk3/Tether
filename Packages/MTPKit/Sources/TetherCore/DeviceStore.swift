@@ -22,7 +22,12 @@ public final class DeviceStore {
     public private(set) var ejecting: Set<DeviceID> = []
     public private(set) var listings: [FolderRef: Listing] = [:]
     public private(set) var hasLoaded = false
+    /// How long a listing may go without reading a single entry before the helper is considered hung.
+    /// It is not a cap on total time: a big Camera folder takes ~30 ms per file and keeps reporting progress.
     public var listTimeout: Duration = .seconds(15)
+    /// Per-device liveness for listings; fed by `noteListProgress`. The device's worker is serial, so progress
+    /// on any folder of the device means a queued listing behind it is not hung either.
+    @ObservationIgnored private var listActivity: [DeviceID: ActivityMonitor] = [:]
 
     /// Reports whether a transfer is running on the device. A listing then queues behind it, so it must not
     /// be timed out (which would restart the service and kill the transfer); the transfer watchdog covers hangs.
@@ -146,7 +151,9 @@ public final class DeviceStore {
             if isDeviceBusy?(folder.deviceID) == true {
                 result = .success(try await service.list(folder))
             } else {
-                result = .success(try await withTimeout(listTimeout, onTimeout: { await service.restart() }) {
+                let activity = listActivityMonitor(folder.deviceID)
+                result = .success(try await withIdleTimeout(listTimeout, activity: activity,
+                                                            onTimeout: { await service.restart() }) {
                     try await service.list(folder)
                 })
             }
@@ -170,6 +177,18 @@ public final class DeviceStore {
             log.record("Listing failed: \(error.logDescription)", category: "browse")
             listings[folder] = Listing(entries: listings[folder]?.entries ?? [], isUpdating: false, error: error)
         }
+    }
+
+    /// The service is still reading `folder`'s entries; pushes back the listing timeout for its device.
+    public func noteListProgress(_ folder: FolderRef) {
+        listActivity[folder.deviceID]?.touch()
+    }
+
+    private func listActivityMonitor(_ id: DeviceID) -> ActivityMonitor {
+        if let monitor = listActivity[id] { return monitor }
+        let monitor = ActivityMonitor()
+        listActivity[id] = monitor
+        return monitor
     }
 
     public func createFolder(named name: String, in folder: FolderRef) async throws -> FileEntry {
