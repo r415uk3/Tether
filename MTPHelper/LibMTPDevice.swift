@@ -6,6 +6,8 @@ import MTPKit
 final class LibMTPDevice: MTPDevice, @unchecked Sendable {
     let info: DeviceInfo
     private var handle: UnsafeMutablePointer<LIBMTP_mtpdevice_t>?
+    /// Turns bulk GetObjectPropList off for phone models where it once hung the helper.
+    private let bulkGuard: BulkListingGuard
 
     init(handle: UnsafeMutablePointer<LIBMTP_mtpdevice_t>, attached: AttachedDevice) {
         self.handle = handle
@@ -15,6 +17,7 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
         let version = Self.take(LIBMTP_Get_Deviceversion(handle))
         info = DeviceInfo(id: serial.map { "serial-\($0)" } ?? attached.id,
                           manufacturer: manufacturer, model: model, state: .ready, osVersion: version)
+        bulkGuard = BulkListingGuard(model: "\(manufacturer) \(model)")
     }
 
     func storages() throws -> [StorageInfo] {
@@ -34,11 +37,12 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
     }
 
     /// Converts a libmtp file record; libmtp reports root children with parent_id 0.
-    private static func entry(from f: UnsafeMutablePointer<LIBMTP_file_t>) -> FileEntry {
+    /// `storageID` fills in a record that came without one (a property list may omit StorageID).
+    private static func entry(from f: UnsafeMutablePointer<LIBMTP_file_t>, storageID: UInt32 = 0) -> FileEntry {
         FileEntry(
             objectID: f.pointee.item_id,
             parentID: f.pointee.parent_id == 0 ? FileEntry.rootID : f.pointee.parent_id,
-            storageID: f.pointee.storage_id,
+            storageID: f.pointee.storage_id == 0 ? storageID : f.pointee.storage_id,
             name: f.pointee.filename.map { String(cString: $0) } ?? "",
             size: f.pointee.filesize,
             modified: f.pointee.modificationdate == 0 ? nil
@@ -46,20 +50,46 @@ final class LibMTPDevice: MTPDevice, @unchecked Sendable {
             isFolder: f.pointee.filetype == LIBMTP_FILETYPE_FOLDER)
     }
 
-    func listFolder(storageID: UInt32, folderID: UInt32) throws -> [FileEntry] {
+    /// GetObjectHandles, then each child's metadata through `FolderLister`: GetObjectPropList for the whole folder
+    /// or per object where the phone supports it (Android answers GetObjectInfo ~30 ms per photo, PropList ~20x
+    /// faster), with GetObjectInfo — what LIBMTP_Get_Files_And_Folders uses — as the fallback.
+    func listFolder(storageID: UInt32, folderID: UInt32, progress: ProgressHandler) throws -> [FileEntry] {
         let h = try requireHandle()
         LIBMTP_Clear_Errorstack(h)
-        var entries: [FileEntry] = []
-        var file = LIBMTP_Get_Files_And_Folders(h, storageID, folderID)
-        while let f = file {
-            let next = f.pointee.next
-            entries.append(Self.entry(from: f))
-            LIBMTP_destroy_file_t(f)
-            file = next
+        var raw: UnsafeMutablePointer<UInt32>?
+        let count = LIBMTP_Get_Children(h, storageID, folderID, &raw)
+        if count < 0 { throw lastError(h) }
+        guard count > 0, let raw else { return [] }
+        let handles = Array(UnsafeBufferPointer(start: raw, count: Int(count)))
+        free(raw)
+
+        let take: (UnsafeMutablePointer<LIBMTP_file_t>?) -> FileEntry? = { f in
+            guard let f else { return nil }
+            defer { LIBMTP_destroy_file_t(f) }
+            let entry = Self.entry(from: f, storageID: storageID)
+            // A record for another folder (stale handle reused) is no good; let the next path read it.
+            let parent = folderID == FileEntry.rootID ? FileEntry.rootID : folderID
+            return entry.parentID == parent ? entry : nil
         }
-        // An empty folder and a failure both return NULL; the error stack tells them apart.
-        if entries.isEmpty, LIBMTP_Get_Errorstack(h) != nil { throw lastError(h) }
-        return entries
+        return try FolderLister.list(
+            handles: handles, folderID: folderID, bulkAllowed: bulkGuard.isAllowed,
+            bulk: { handles in
+                var out = [UnsafeMutablePointer<LIBMTP_file_t>?](repeating: nil, count: handles.count)
+                bulkGuard.begin()
+                let rc = LIBMTP_Tether_Get_Folder_Props(h, storageID, folderID, handles, Int32(handles.count), &out)
+                bulkGuard.end()
+                // Refusals are quick and per folder (a vivo refuses Pictures but serves Camera), so only this
+                // listing falls back; hangs are what `bulkGuard` is for.
+                guard rc == 0 else { LIBMTP_Clear_Errorstack(h); return nil }
+                return out.map(take)
+            },
+            single: { take(LIBMTP_Tether_Get_File_Props(h, $0)) },
+            slow: { handle in
+                guard let f = LIBMTP_Get_Filemetadata(h, handle) else { return nil }
+                defer { LIBMTP_destroy_file_t(f) }
+                return Self.entry(from: f)
+            },
+            progress: progress)
     }
 
     func objectInfo(objectID: UInt32) throws -> FileEntry? {

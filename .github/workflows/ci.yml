@@ -29,7 +29,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: Vendor/build
-          key: vendor-${{ runner.os }}-${{ hashFiles('Vendor/build-libs.sh') }}
+          key: vendor-${{ runner.os }}-${{ hashFiles('Vendor/build-libs.sh', 'Vendor/patches/**') }}
       - name: Build libusb + libmtp
         run: '[ -f Vendor/build/lib/libmtp.9.dylib ] || Vendor/build-libs.sh'
       - name: Script tests

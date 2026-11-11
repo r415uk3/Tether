@@ -35,3 +35,33 @@ import Testing
         try await withTimeout(.seconds(5), onTimeout: {}) { () async throws -> Int in throw MTPError.notFound }
     }
 }
+
+@Test func withIdleTimeoutLetsAnOperationThatKeepsReportingActivityFinish() async throws {
+    let activity = ActivityMonitor()
+    let called = LockedFlag()
+    let value = try await withIdleTimeout(.milliseconds(100), activity: activity, onTimeout: { called.set() }) {
+        for _ in 0..<10 { // 300 ms in total, never more than 30 ms without activity
+            try await Task.sleep(for: .milliseconds(30))
+            activity.touch()
+        }
+        return 42
+    }
+    #expect(value == 42)
+    #expect(!called.isSet)
+}
+
+@Test func withIdleTimeoutTimesOutWhenActivityStops() async {
+    let activity = ActivityMonitor()
+    let called = LockedFlag()
+    await #expect(throws: MTPError.timeout) {
+        try await withIdleTimeout(.milliseconds(100), activity: activity, onTimeout: { called.set() }) {
+            for _ in 0..<3 {
+                try await Task.sleep(for: .milliseconds(30))
+                activity.touch()
+            }
+            try await Task.sleep(for: .seconds(10))
+            return 1
+        }
+    }
+    #expect(called.isSet)
+}

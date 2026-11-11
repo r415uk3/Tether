@@ -3,6 +3,8 @@ import Foundation
 public enum ServiceEvent: Codable, Sendable, Equatable {
     case devicesChanged([DeviceInfo])
     case progress(jobID: UUID, done: UInt64, total: UInt64)
+    /// A listing of `folder` is still reading entries from the phone (done of total).
+    case listProgress(folder: FolderRef, done: UInt64, total: UInt64)
     /// The service lost its state (helper restarted). In-flight calls have failed.
     case interrupted
 }

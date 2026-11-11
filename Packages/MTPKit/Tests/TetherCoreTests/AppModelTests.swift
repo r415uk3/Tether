@@ -108,6 +108,22 @@ import MTPKit
         }
     }
 
+    /// A big Camera folder can take longer than `listTimeout` to list (the phone answers one file at a time);
+    /// as long as files keep arriving it must load instead of timing out and restarting the helper.
+    @Test func slowListingThatKeepsProgressingDoesNotTimeOut() async throws {
+        let slow = FakeDevice(id: "p1", listItemDelay: 0.03)
+        provider.attach(slow)
+        for i in 0..<20 { slow.addFile("IMG_\(i).jpg", data: Data()) }
+        let model = try makeModel(LocalMTPService(provider: provider))
+        model.devices.listTimeout = .milliseconds(300)
+        await model.start()
+        let root = FolderRef(deviceID: "p1", storageID: 1)
+        await model.devices.refresh(root)
+        #expect(model.devices.listings[root]?.error == nil)
+        #expect(model.devices.listings[root]?.entries.count == 20)
+        #expect(provider.openCount("p1") == 1)
+    }
+
     @Test func browsingDuringPreviewDownloadDoesNotTimeOutOrRestart() async throws {
         let slow = FakeDevice(id: "p1", chunkSize: 8192, chunkDelay: 0.01)
         provider.attach(slow)

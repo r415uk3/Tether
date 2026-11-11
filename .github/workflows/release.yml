@@ -21,7 +21,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: Vendor/build
-          key: vendor-${{ runner.os }}-${{ hashFiles('Vendor/build-libs.sh') }}
+          key: vendor-${{ runner.os }}-${{ hashFiles('Vendor/build-libs.sh', 'Vendor/patches/**') }}
       - run: '[ -f Vendor/build/lib/libmtp.9.dylib ] || Vendor/build-libs.sh'
       - name: Version from tag
         run: |

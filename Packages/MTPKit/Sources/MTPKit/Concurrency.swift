@@ -63,6 +63,47 @@ public func withTimeout<T: Sendable>(
     }
 }
 
+/// The last time an operation showed signs of life; `withIdleTimeout` restarts its deadline from it.
+public final class ActivityMonitor: @unchecked Sendable {
+    private let lock = NSLock()
+    private var last = ContinuousClock.now
+    public init() {}
+    public func touch() { lock.withLock { last = .now } }
+    public var lastActivity: ContinuousClock.Instant { lock.withLock { last } }
+}
+
+/// Like `withTimeout`, but only gives up after `idle` passes with no `activity.touch()`.
+/// A slow operation that keeps reporting progress runs to completion; a stalled one is timed out.
+public func withIdleTimeout<T: Sendable>(
+    _ idle: Duration,
+    activity: ActivityMonitor,
+    onTimeout: @escaping @Sendable () async -> Void,
+    operation: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    activity.touch()
+    let timedOut = LockedFlag()
+    return try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask { try await operation() }
+        group.addTask {
+            while true {
+                let deadline = activity.lastActivity.advanced(by: idle)
+                if ContinuousClock.now >= deadline { break }
+                try await Task.sleep(until: deadline, clock: .continuous)
+            }
+            timedOut.set()
+            await onTimeout()
+            throw MTPError.timeout
+        }
+        defer { group.cancelAll() }
+        do {
+            guard let result = try await group.next() else { throw MTPError.timeout }
+            return result
+        } catch {
+            throw timedOut.isSet ? MTPError.timeout : error
+        }
+    }
+}
+
 /// Runs a blocking call (libmtp `open`, agent termination) off Swift's cooperative pool.
 /// The pool has about one thread per core, so blocking inside `Task.detached` can starve every task, including the
 /// one that would unblock the call. GCD's global queue adds threads for blocked work, so blocking here is safe.

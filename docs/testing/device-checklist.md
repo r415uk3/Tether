@@ -31,6 +31,7 @@ Run before each release with at least a Pixel, a Samsung and a Xiaomi phone. Not
 - [ ] Press Release: the phone becomes browsable within 3 s. Repeat 3 times; note any "Still held" results.
 - [ ] Check that macOS doesn't relaunch ptpcamerad and re-grab the phone within 10 s after Release.
 - [ ] Without pressing Release, Tether never quits Image Capture on its own (leave it open for 1 minute).
+- [ ] Open DCIM/Camera with 500+ photos: it loads in a few seconds (not ~30 ms per photo) with no timeout; Download and Pictures load too; names, sizes and dates match the phone.
 
 ## Transfers
 - [ ] In the phone's root folder: drop a file in (Keep Both and Replace on a second drop) and create a folder; nothing fails (Android rejects a root sent as 0).

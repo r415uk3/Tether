@@ -18,6 +18,8 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     public let info: DeviceInfo
     private let chunkSize: Int
     private let chunkDelay: TimeInterval
+    /// Time `listFolder` spends per entry, like a phone answering GetObjectInfo one file at a time.
+    private let listItemDelay: TimeInterval
     private let lock = NSLock()
     private let hangGate = DispatchSemaphore(value: 0)
     private var storageList: [StorageInfo]
@@ -36,11 +38,13 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
     public init(id: DeviceID = "fake-1", manufacturer: String = "Google", model: String = "Pixel 9",
                 storages: [StorageInfo] = [StorageInfo(id: 1, name: "Internal shared storage",
                                                        capacity: 128_000_000_000, freeSpace: 64_000_000_000)],
-                chunkSize: Int = 4096, chunkDelay: TimeInterval = 0, osVersion: String? = nil) {
+                chunkSize: Int = 4096, chunkDelay: TimeInterval = 0, listItemDelay: TimeInterval = 0,
+                osVersion: String? = nil) {
         self.info = DeviceInfo(id: id, manufacturer: manufacturer, model: model, state: .ready, osVersion: osVersion)
         self.storageList = storages
         self.chunkSize = chunkSize
         self.chunkDelay = chunkDelay
+        self.listItemDelay = listItemDelay
     }
 
     // MARK: Test setup and inspection
@@ -83,11 +87,17 @@ public final class FakeDevice: MTPDevice, @unchecked Sendable {
         return lock.withLock { storageList }
     }
 
-    public func listFolder(storageID: UInt32, folderID: UInt32) throws -> [FileEntry] {
+    public func listFolder(storageID: UInt32, folderID: UInt32, progress: ProgressHandler) throws -> [FileEntry] {
         lock.withLock { listCalls += 1 }
         try beginSimple()
         try lock.withLock { try requireFolder(folderID) }
-        return children(of: folderID, storageID: storageID)
+        let entries = children(of: folderID, storageID: storageID)
+        let total = UInt64(entries.count)
+        for index in entries.indices {
+            if listItemDelay > 0 { Thread.sleep(forTimeInterval: listItemDelay) }
+            guard progress(UInt64(index + 1), total) else { throw MTPError.cancelled }
+        }
+        return entries
     }
 
     /// Never consumes injected faults, so a fault injected for a test still hits the operation under test.

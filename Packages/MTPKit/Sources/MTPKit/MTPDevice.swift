@@ -8,7 +8,8 @@ public typealias ProgressHandler = (_ done: UInt64, _ total: UInt64) -> Bool
 public protocol MTPDevice: AnyObject, Sendable {
     var info: DeviceInfo { get }
     func storages() throws -> [StorageInfo]
-    func listFolder(storageID: UInt32, folderID: UInt32) throws -> [FileEntry]
+    /// `progress` is called with entries read / total as the phone answers; return `false` to cancel.
+    func listFolder(storageID: UInt32, folderID: UInt32, progress: ProgressHandler) throws -> [FileEntry]
     /// The object's current metadata (GetObjectInfo), or nil if no object has this handle.
     func objectInfo(objectID: UInt32) throws -> FileEntry?
     func download(objectID: UInt32, to fileURL: URL, progress: ProgressHandler) throws
@@ -20,6 +21,12 @@ public protocol MTPDevice: AnyObject, Sendable {
     /// The phone's own thumbnail for the object (usually JPEG), or nil if it has none.
     func thumbnail(objectID: UInt32) throws -> Data?
     func close()
+}
+
+public extension MTPDevice {
+    func listFolder(storageID: UInt32, folderID: UInt32) throws -> [FileEntry] {
+        try listFolder(storageID: storageID, folderID: folderID) { _, _ in true }
+    }
 }
 
 public struct AttachedDevice: Hashable, Sendable {
