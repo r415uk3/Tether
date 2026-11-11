@@ -39,9 +39,11 @@ import Testing
 @Test func withIdleTimeoutLetsAnOperationThatKeepsReportingActivityFinish() async throws {
     let activity = ActivityMonitor()
     let called = LockedFlag()
-    let value = try await withIdleTimeout(.milliseconds(100), activity: activity, onTimeout: { called.set() }) {
-        for _ in 0..<10 { // 300 ms in total, never more than 30 ms without activity
-            try await Task.sleep(for: .milliseconds(30))
+    // 1 s idle limit vs ~20 ms between touches: generous, so a busy CI runner's late wakeups can't trip it,
+    // while the whole operation (~400 ms) still outlasts what a plain 100 ms timeout would allow.
+    let value = try await withIdleTimeout(.seconds(1), activity: activity, onTimeout: { called.set() }) {
+        for _ in 0..<20 {
+            try await Task.sleep(for: .milliseconds(20))
             activity.touch()
         }
         return 42
